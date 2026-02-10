@@ -8,8 +8,7 @@ echo "This bot connects to Matrix and MongoDB to serve !randcaps commands."
 echo ""
 
 if [[ -f .env ]]; then
-  echo "Found existing .env file:"
-  cat .env
+  echo "Found existing .env file (content hidden)."
   echo ""
   read -r -p "Reuse these secrets? [Y/n] " REUSE
   if [[ ! "$REUSE" =~ ^[Nn] ]]; then
