@@ -200,12 +200,37 @@ namespace ComputerBot
 
         static async Task<string> ResolveRoomId(IMatrixClient client, string aliasOrId)
         {
-            if (aliasOrId.StartsWith("!")) return aliasOrId; // Already an ID
-            
-            // Try to join/resolve
-            // Note: JoinTrustedPrivateRoomAsync returns JoinRoomResponse which has RoomId
-            var response = await client.JoinTrustedPrivateRoomAsync(aliasOrId);
-            return response.RoomId;
+            // Join everything to ensure we are in the room and resolve aliases
+            try 
+            {
+                var url = $"{_homeserverUrl}/_matrix/client/v3/join/{Uri.EscapeDataString(aliasOrId)}";
+                var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+                
+                var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+                request.Content = content;
+                
+                var response = await _httpClient.SendAsync(request);
+                var respBody = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(respBody);
+                    if (doc.RootElement.TryGetProperty("room_id", out var idProp))
+                    {
+                        var roomId = idProp.GetString();
+                        Console.WriteLine($"Joined/Resolved {aliasOrId} -> {roomId}");
+                        return roomId;
+                    }
+                }
+                
+                throw new Exception($"HTTP {response.StatusCode}: {respBody}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Join error: {ex}");
+                throw;
+            }
         }
 
         static async Task HandleZow(IMatrixClient client, BotDbContext db, string roomId, double seed)
