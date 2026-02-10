@@ -28,6 +28,14 @@ namespace ComputerBot.Commands
                          filterBuilder.Eq("type", "m.room.message") &
                          filterBuilder.Nin("sender", blacklist);
 
+            // Optional user filter: !randcaps <username>
+            var args = ctx.Args?.Trim();
+            if (!string.IsNullOrEmpty(args))
+            {
+                // Case-insensitive sender match
+                filter &= filterBuilder.Regex("sender", new BsonRegularExpression(args, "i"));
+            }
+
             var pipeline = new EmptyPipelineDefinition<BsonDocument>()
                 .Match(filter)
                 .Sample(50);
