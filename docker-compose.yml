@@ -3,9 +3,14 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - computer_data:/app/data
     networks:
       - doghouse_default
 
 networks:
   doghouse_default:
     external: true
+
+volumes:
+  computer_data:

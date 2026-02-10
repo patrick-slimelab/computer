@@ -44,6 +44,9 @@ namespace ComputerBot
                 blacklist.Add(user);
             }
 
+            // Ensure data dir exists
+            Directory.CreateDirectory("data");
+
             using (var dbContext = new BotDbContext())
             {
                 dbContext.Database.EnsureCreated();

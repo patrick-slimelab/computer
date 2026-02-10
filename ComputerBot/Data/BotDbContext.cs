@@ -8,7 +8,7 @@ namespace ComputerBot.Data
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite("Data Source=computer.db");
+            optionsBuilder.UseSqlite("Data Source=data/computer.db");
         }
     }
 
