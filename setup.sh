@@ -7,6 +7,20 @@ echo "=== Computer Bot Setup ==="
 echo "This bot connects to Matrix and MongoDB to serve !randcaps commands."
 echo ""
 
+if [[ -f .env ]]; then
+  echo "Found existing .env file:"
+  cat .env
+  echo ""
+  read -r -p "Reuse these secrets? [Y/n] " REUSE
+  if [[ ! "$REUSE" =~ ^[Nn] ]]; then
+    echo "Using existing .env"
+    docker compose up -d --build
+    echo "Done! Logs:"
+    docker compose logs -f
+    exit 0
+  fi
+fi
+
 read -r -p "Matrix Homeserver URL [https://cclub.cs.wmich.edu]: " HS
 HS=${HS:-https://cclub.cs.wmich.edu}
 

@@ -46,7 +46,10 @@ namespace ComputerBot
                 {
                     if (roomEvent is not TextMessageEvent textEvent) continue;
                     
-                    var (roomId, senderId, message) = textEvent;
+                    var roomId = textEvent.RoomId;
+                    var senderId = textEvent.SenderUserId;
+                    var message = textEvent.Message;
+
                     if (string.IsNullOrWhiteSpace(message)) continue;
 
                     if (message.Trim().StartsWith("!randcaps"))
