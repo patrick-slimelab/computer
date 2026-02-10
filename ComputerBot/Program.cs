@@ -2,11 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.IO;
 using Matrix.Sdk;
 using Matrix.Sdk.Core.Domain.RoomEvent;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using ComputerBot.Data;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing;
 
 namespace ComputerBot
 {
@@ -32,25 +38,21 @@ namespace ComputerBot
                 return;
             }
 
-            // Build full blacklist including self
             var blacklist = BaseBlacklist.ToList();
             if (!string.IsNullOrEmpty(user) && !blacklist.Contains(user))
             {
                 blacklist.Add(user);
             }
 
-            // Init DB
             using (var dbContext = new BotDbContext())
             {
                 dbContext.Database.EnsureCreated();
             }
 
-            // Setup Mongo
             var mongoClient = new MongoClient(mongoUri);
             var db = mongoClient.GetDatabase(dbName);
             var collection = db.GetCollection<BsonDocument>("events");
 
-            // Setup Matrix
             var factory = new MatrixClientFactory();
             var client = factory.Create();
 
@@ -61,7 +63,6 @@ namespace ComputerBot
                 {
                     if (roomEvent is not TextMessageEvent textEvent) continue;
                     
-                    // Deduplicate
                     if (dbContext.HandledEvents.Any(e => e.EventId == textEvent.EventId)) continue;
 
                     var roomId = textEvent.RoomId;
@@ -70,18 +71,26 @@ namespace ComputerBot
 
                     if (string.IsNullOrWhiteSpace(message)) continue;
 
-                    if (message.Trim().StartsWith("!randcaps"))
+                    var trimmed = message.Trim();
+                    if (trimmed.StartsWith("!randcaps"))
                     {
-                        Console.WriteLine($"Command from {senderId} in {roomId}: {message}");
+                        Console.WriteLine($"Randcaps from {senderId} in {roomId}");
                         await HandleRandCaps(client, collection, roomId, blacklist);
-
-                        // Mark handled
-                        dbContext.HandledEvents.Add(new HandledEvent 
-                        { 
-                            EventId = textEvent.EventId, 
-                            ProcessedAt = DateTime.UtcNow 
-                        });
-                        await dbContext.SaveChangesAsync();
+                        await MarkHandled(dbContext, textEvent.EventId);
+                    }
+                    else if (trimmed.StartsWith("!zow"))
+                    {
+                        Console.WriteLine($"Zow from {senderId} in {roomId}");
+                        var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length > 1 && double.TryParse(parts[1], out double seed))
+                        {
+                            await HandleZow(client, roomId, seed);
+                        }
+                        else
+                        {
+                            await client.SendMessageAsync(roomId, "`Usage: !zow <seed>`");
+                        }
+                        await MarkHandled(dbContext, textEvent.EventId);
                     }
                 }
             };
@@ -95,12 +104,71 @@ namespace ComputerBot
             await Task.Delay(-1);
         }
 
+        static async Task MarkHandled(BotDbContext db, string eventId)
+        {
+            db.HandledEvents.Add(new HandledEvent { EventId = eventId, ProcessedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        static async Task HandleZow(IMatrixClient client, string roomId, double seed)
+        {
+            try
+            {
+                int width = 512;
+                int height = 512;
+                using var image = new Image<Rgba32>(width, height);
+                
+                // Black background
+                image.Mutate(x => x.Fill(Color.Black));
+
+                var points = new List<PointF>();
+                float centerX = width / 2f;
+                float centerY = height / 2f;
+
+                // Algorithm: 
+                // for (let i = 0; i < 500; i++) {
+                //   const angle = i * seed * (1 / Math.PI);
+                //   const x = centerX + i * Math.cos(angle);
+                //   const y = centerY + i * Math.sin(angle);
+                // }
+                
+                // Scale i? 500 radius is too big for 512x512 (radius 256). 
+                // Let's scale i by 0.45 to fit comfortably.
+                
+                for (int i = 0; i < 500; i++)
+                {
+                    double angle = i * seed * (1.0 / Math.PI);
+                    float r = i * 0.45f; 
+                    float x = centerX + r * (float)Math.Cos(angle);
+                    float y = centerY + r * (float)Math.Sin(angle);
+                    points.Add(new PointF(x, y));
+                }
+
+                if (points.Count > 1)
+                {
+                    // Draw lines. Green like old phosphor monitors.
+                    image.Mutate(x => x.DrawLines(Color.Lime, 1.5f, points.ToArray()));
+                }
+
+                using var ms = new MemoryStream();
+                await image.SaveAsPngAsync(ms);
+                var bytes = ms.ToArray();
+
+                await client.SendImageAsync(roomId, $"zow_{seed}.png", bytes);
+                Console.WriteLine($"Sent ZOW {seed}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Zow Error: {ex}");
+                await client.SendMessageAsync(roomId, $"`Error generating ZOW: {ex.Message}`");
+            }
+        }
+
         static async Task HandleRandCaps(IMatrixClient client, IMongoCollection<BsonDocument> collection, string roomId, IEnumerable<string> blacklist)
         {
             try 
             {
                 var filterBuilder = Builders<BsonDocument>.Filter;
-                // Regex: Start with non-lowercase, end with non-lowercase
                 var filter = filterBuilder.Regex("content.body", new BsonRegularExpression("^[^a-z]+$")) &
                              filterBuilder.Eq("type", "m.room.message") &
                              filterBuilder.Nin("sender", blacklist);
