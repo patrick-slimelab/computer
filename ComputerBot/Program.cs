@@ -146,8 +146,12 @@ namespace ComputerBot
 
                 if (points.Count > 1)
                 {
-                    // Draw lines. Green like old phosphor monitors.
-                    image.Mutate(x => x.DrawLines(Color.Lime, 1.5f, points.ToArray()));
+                    // Draw lines using PathBuilder
+                    var pb = new PathBuilder();
+                    pb.AddLines(points);
+                    var path = pb.Build();
+                    
+                    image.Mutate(x => x.Draw(Color.Lime, 1.5f, path));
                 }
 
                 using var ms = new MemoryStream();
