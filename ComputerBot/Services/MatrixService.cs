@@ -3,20 +3,24 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Matrix.Sdk;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace ComputerBot.Services
 {
     public class MatrixService
     {
         private readonly HttpClient _http = new HttpClient();
+        private readonly IMongoCollection<BsonDocument> _events;
         private string _accessToken;
         private string _homeserverUrl;
         
         public IMatrixClient Client { get; }
 
-        public MatrixService(IMatrixClient client)
+        public MatrixService(IMatrixClient client, IMongoCollection<BsonDocument> events)
         {
             Client = client;
+            _events = events;
         }
 
         public async Task LoginAsync(Uri hs, string user, string pass)
@@ -32,7 +36,44 @@ namespace ComputerBot.Services
         {
             if (aliasOrId.StartsWith("!")) return aliasOrId;
             
-            // 1. Try Directory API (GET) - safest read-only check
+            // 1. Try Local MongoDB (Fastest, avoids API errors)
+            if (aliasOrId.StartsWith("#"))
+            {
+                try 
+                {
+                    Console.WriteLine($"Resolving {aliasOrId} via MongoDB...");
+                    
+                    // Match m.room.canonical_alias
+                    var canonical = await _events.Find(
+                        Builders<BsonDocument>.Filter.Eq("content.alias", aliasOrId)
+                    ).Project("{room_id: 1}").FirstOrDefaultAsync();
+
+                    if (canonical != null && canonical.Contains("room_id"))
+                    {
+                        var id = canonical["room_id"].AsString;
+                        Console.WriteLine($"Mongo resolved {aliasOrId} -> {id}");
+                        return id;
+                    }
+
+                    // Match m.room.aliases list
+                    var aliases = await _events.Find(
+                        Builders<BsonDocument>.Filter.Eq("content.aliases", aliasOrId)
+                    ).Project("{room_id: 1}").FirstOrDefaultAsync();
+
+                    if (aliases != null && aliases.Contains("room_id"))
+                    {
+                        var id = aliases["room_id"].AsString;
+                        Console.WriteLine($"Mongo resolved {aliasOrId} -> {id}");
+                        return id;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Mongo lookup error: {ex.Message}");
+                }
+            }
+
+            // 2. Try Directory API (GET)
             if (aliasOrId.StartsWith("#"))
             {
                 try 
@@ -52,8 +93,6 @@ namespace ComputerBot.Services
                         {
                             var resolved = id.GetString();
                             Console.WriteLine($"Directory resolved {aliasOrId} -> {resolved}");
-                            // Ensure joined
-                            try { await Client.JoinTrustedPrivateRoomAsync(resolved); } catch {}
                             return resolved;
                         }
                     }
@@ -65,11 +104,10 @@ namespace ComputerBot.Services
                 }
             }
 
-            // 2. Try Manual JOIN via v3 API (POST)
+            // 3. Fallback to Manual JOIN (v3 POST) - Last resort for unindexed rooms
             try 
             {
                 var joinUrl = $"{_homeserverUrl}/_matrix/client/v3/join/{Uri.EscapeDataString(aliasOrId)}";
-                // Some servers require params, some empty object.
                 var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
                 var req = new HttpRequestMessage(HttpMethod.Post, joinUrl);
                 req.Headers.Add("Authorization", $"Bearer {_accessToken}");
@@ -83,7 +121,6 @@ namespace ComputerBot.Services
                     using var doc = JsonDocument.Parse(body);
                     if (doc.RootElement.TryGetProperty("room_id", out var id)) 
                     {
-                        Console.WriteLine($"v3 Join success: {aliasOrId}");
                         return id.GetString();
                     }
                 }
@@ -91,10 +128,7 @@ namespace ComputerBot.Services
             }
             catch (Exception ex) { Console.WriteLine($"v3 Join exception: {ex.Message}"); }
 
-            // 3. Fallback to SDK (might be r0 or different logic)
-            Console.WriteLine("Fallback to SDK Join...");
-            var join = await Client.JoinTrustedPrivateRoomAsync(aliasOrId);
-            return join.RoomId;
+            throw new Exception($"Could not resolve room alias: {aliasOrId}");
         }
     }
 }

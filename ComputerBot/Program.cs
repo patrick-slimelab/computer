@@ -44,7 +44,7 @@ namespace ComputerBot
             var factory = new MatrixClientFactory();
             var client = factory.Create();
             
-            var matrixService = new MatrixService(client);
+            var matrixService = new MatrixService(client, collection);
             var dispatcher = new CommandDispatcher(matrixService, collection);
 
             client.OnMatrixRoomEventsReceived += async (sender, eventArgs) =>
