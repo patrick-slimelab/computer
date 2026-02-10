@@ -31,6 +31,7 @@ namespace ComputerBot
             var pass = Environment.GetEnvironmentVariable("MATRIX_PASSWORD");
             var mongoUri = Environment.GetEnvironmentVariable("MONGODB_URI") ?? "mongodb://mongo:27017";
             var dbName = Environment.GetEnvironmentVariable("MONGODB_DB") ?? "matrix_index";
+            var rootUser = Environment.GetEnvironmentVariable("ROOT_USER_ID");
 
             if (string.IsNullOrEmpty(user) || string.IsNullOrEmpty(pass))
             {
@@ -75,25 +76,45 @@ namespace ComputerBot
                     if (string.IsNullOrWhiteSpace(message)) continue;
 
                     var trimmed = message.Trim();
-                    if (trimmed.StartsWith("!randcaps"))
+                    try 
                     {
-                        Console.WriteLine($"Randcaps from {senderId} in {roomId}");
-                        await HandleRandCaps(client, collection, roomId, blacklist);
-                        await MarkHandled(dbContext, textEvent.EventId);
+                        if (trimmed.StartsWith("!randcaps"))
+                        {
+                            Console.WriteLine($"Randcaps from {senderId} in {roomId}");
+                            await HandleRandCaps(client, collection, roomId, blacklist);
+                            await MarkHandled(dbContext, textEvent.EventId);
+                        }
+                        else if (trimmed.StartsWith("!zow"))
+                        {
+                            Console.WriteLine($"Zow from {senderId} in {roomId}");
+                            var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length > 1 && double.TryParse(parts[1], out double seed))
+                            {
+                                await HandleZow(client, dbContext, roomId, seed);
+                            }
+                            else
+                            {
+                                await client.SendMessageAsync(roomId, "`Usage: !zow <seed>`");
+                            }
+                            await MarkHandled(dbContext, textEvent.EventId);
+                        }
+                        else if (trimmed.StartsWith("!image-channel"))
+                        {
+                            Console.WriteLine($"ImageChannel from {senderId} in {roomId}");
+                            if (senderId != rootUser)
+                            {
+                                await client.SendMessageAsync(roomId, "`Error: Unauthorized. Only root user can configure channels.`");
+                            }
+                            else
+                            {
+                                await HandleImageChannel(client, dbContext, roomId, trimmed);
+                            }
+                            await MarkHandled(dbContext, textEvent.EventId);
+                        }
                     }
-                    else if (trimmed.StartsWith("!zow"))
+                    catch (Exception ex)
                     {
-                        Console.WriteLine($"Zow from {senderId} in {roomId}");
-                        var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length > 1 && double.TryParse(parts[1], out double seed))
-                        {
-                            await HandleZow(client, roomId, seed);
-                        }
-                        else
-                        {
-                            await client.SendMessageAsync(roomId, "`Usage: !zow <seed>`");
-                        }
-                        await MarkHandled(dbContext, textEvent.EventId);
+                        Console.WriteLine($"Top-level handler error: {ex}");
                     }
                 }
             };
@@ -113,31 +134,93 @@ namespace ComputerBot
             await db.SaveChangesAsync();
         }
 
-        static async Task HandleZow(IMatrixClient client, string roomId, double seed)
+        static async Task HandleImageChannel(IMatrixClient client, BotDbContext db, string roomId, string command)
+        {
+            // !image-channel #source #target
+            // !image-channel remove #source
+            
+            var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+            {
+                await client.SendMessageAsync(roomId, "`Usage: !image-channel <source> <target> OR !image-channel remove <source>`");
+                return;
+            }
+
+            string action = parts[1];
+            
+            if (action == "remove" && parts.Length >= 3)
+            {
+                string sourceAlias = parts[2];
+                string sourceId = await ResolveRoomId(client, sourceAlias);
+                
+                var mapping = db.ImageChannelMappings.FirstOrDefault(m => m.SourceRoomId == sourceId);
+                if (mapping != null)
+                {
+                    db.ImageChannelMappings.Remove(mapping);
+                    await db.SaveChangesAsync();
+                    await client.SendMessageAsync(roomId, $"`Removed image routing for {sourceAlias} ({sourceId})`");
+                }
+                else
+                {
+                    await client.SendMessageAsync(roomId, $"`No mapping found for {sourceAlias}`");
+                }
+                return;
+            }
+
+            if (parts.Length >= 3)
+            {
+                string sourceAlias = parts[1];
+                string targetAlias = parts[2];
+
+                try 
+                {
+                    string sourceId = await ResolveRoomId(client, sourceAlias);
+                    string targetId = await ResolveRoomId(client, targetAlias);
+
+                    var mapping = db.ImageChannelMappings.FirstOrDefault(m => m.SourceRoomId == sourceId);
+                    if (mapping == null)
+                    {
+                        mapping = new ImageChannelMapping { SourceRoomId = sourceId, TargetRoomId = targetId };
+                        db.ImageChannelMappings.Add(mapping);
+                    }
+                    else
+                    {
+                        mapping.TargetRoomId = targetId;
+                    }
+                    
+                    await db.SaveChangesAsync();
+                    await client.SendMessageAsync(roomId, $"`Images from {sourceAlias} will now go to {targetAlias}`");
+                }
+                catch (Exception ex)
+                {
+                    await client.SendMessageAsync(roomId, $"`Error resolving rooms: {ex.Message}`");
+                }
+            }
+        }
+
+        static async Task<string> ResolveRoomId(IMatrixClient client, string aliasOrId)
+        {
+            if (aliasOrId.StartsWith("!")) return aliasOrId; // Already an ID
+            
+            // Try to join/resolve
+            // Note: JoinTrustedPrivateRoomAsync returns JoinRoomResponse which has RoomId
+            var response = await client.JoinTrustedPrivateRoomAsync(aliasOrId);
+            return response.RoomId;
+        }
+
+        static async Task HandleZow(IMatrixClient client, BotDbContext db, string roomId, double seed)
         {
             try
             {
                 int width = 512;
                 int height = 512;
                 using var image = new Image<Rgba32>(width, height);
-                
-                // Black background
                 image.Mutate(x => x.Fill(Color.Black));
 
                 var points = new List<PointF>();
                 float centerX = width / 2f;
                 float centerY = height / 2f;
 
-                // Algorithm: 
-                // for (let i = 0; i < 500; i++) {
-                //   const angle = i * seed * (1 / Math.PI);
-                //   const x = centerX + i * Math.cos(angle);
-                //   const y = centerY + i * Math.sin(angle);
-                // }
-                
-                // Scale i? 500 radius is too big for 512x512 (radius 256). 
-                // Let's scale i by 0.45 to fit comfortably.
-                
                 for (int i = 0; i < 500; i++)
                 {
                     double angle = i * seed * (1.0 / Math.PI);
@@ -149,11 +232,9 @@ namespace ComputerBot
 
                 if (points.Count > 1)
                 {
-                    // Draw lines using PathBuilder
                     var pb = new PathBuilder();
                     pb.AddLines(points);
                     var path = pb.Build();
-                    
                     image.Mutate(x => x.Draw(Color.Lime, 1.5f, path));
                 }
 
@@ -161,13 +242,34 @@ namespace ComputerBot
                 await image.SaveAsPngAsync(ms);
                 var bytes = ms.ToArray();
 
-                await client.SendImageAsync(roomId, $"zow_{seed}.png", bytes);
+                await SendImageWithRouting(client, db, roomId, $"zow_{seed}.png", bytes);
                 Console.WriteLine($"Sent ZOW {seed}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Zow Error: {ex}");
                 await client.SendMessageAsync(roomId, $"`Error generating ZOW: {ex.Message}`");
+            }
+        }
+
+        static async Task SendImageWithRouting(IMatrixClient client, BotDbContext db, string roomId, string filename, byte[] data)
+        {
+            var mapping = db.ImageChannelMappings.FirstOrDefault(m => m.SourceRoomId == roomId);
+            string targetRoom = roomId;
+            
+            if (mapping != null)
+            {
+                targetRoom = mapping.TargetRoomId;
+            }
+
+            var eventId = await client.SendImageAsync(targetRoom, filename, data);
+            
+            if (targetRoom != roomId)
+            {
+                // Link to the image in the target room
+                // Matrix.to link: https://matrix.to/#/!roomid/eventid
+                var link = $"https://matrix.to/#/{targetRoom}/{eventId}";
+                await client.SendMessageAsync(roomId, $"`Image posted to image channel`: {link}");
             }
         }
 

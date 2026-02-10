@@ -32,6 +32,9 @@ echo ""
 read -r -p "MongoDB URI [mongodb://scoob-doghouse-mongo:27017]: " MONGO_URI
 MONGO_URI=${MONGO_URI:-mongodb://scoob-doghouse-mongo:27017}
 
+read -r -p "Root User ID (for privileged commands) [@slimeq:cclub.cs.wmich.edu]: " ROOT_USER
+ROOT_USER=${ROOT_USER:-@slimeq:cclub.cs.wmich.edu}
+
 echo "Writing .env..."
 cat > .env <<EOF
 MATRIX_HOMESERVER=$HS
@@ -39,6 +42,7 @@ MATRIX_USER_ID=$USER_ID
 MATRIX_PASSWORD=$PASSWORD
 MONGODB_URI=$MONGO_URI
 MONGODB_DB=matrix_index
+ROOT_USER_ID=$ROOT_USER
 EOF
 
 echo "Building and starting..."
