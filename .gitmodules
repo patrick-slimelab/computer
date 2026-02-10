@@ -1,0 +1,3 @@
+[submodule "matrix-dotnet-sdk"]
+	path = matrix-dotnet-sdk
+	url = https://github.com/SlimeQ/matrix-dotnet-sdk.git

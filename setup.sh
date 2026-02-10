@@ -16,8 +16,8 @@ USER_ID=${USER_ID:-@computer:cclub.cs.wmich.edu}
 read -r -s -p "Matrix Password (or Access Token): " PASSWORD
 echo ""
 
-read -r -p "MongoDB URI [mongodb://mongo:27017]: " MONGO_URI
-MONGO_URI=${MONGO_URI:-mongodb://mongo:27017}
+read -r -p "MongoDB URI [mongodb://scoob-doghouse-mongo:27017]: " MONGO_URI
+MONGO_URI=${MONGO_URI:-mongodb://scoob-doghouse-mongo:27017}
 
 echo "Writing .env..."
 cat > .env <<EOF
