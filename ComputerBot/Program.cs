@@ -6,6 +6,7 @@ using Matrix.Sdk;
 using Matrix.Sdk.Core.Domain.RoomEvent;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using ComputerBot.Data;
 
 namespace ComputerBot
 {
@@ -31,6 +32,12 @@ namespace ComputerBot
                 return;
             }
 
+            // Init DB
+            using (var dbContext = new BotDbContext())
+            {
+                dbContext.Database.EnsureCreated();
+            }
+
             // Setup Mongo
             var mongoClient = new MongoClient(mongoUri);
             var db = mongoClient.GetDatabase(dbName);
@@ -42,10 +49,14 @@ namespace ComputerBot
 
             client.OnMatrixRoomEventsReceived += async (sender, eventArgs) =>
             {
+                using var dbContext = new BotDbContext();
                 foreach (var roomEvent in eventArgs.MatrixRoomEvents)
                 {
                     if (roomEvent is not TextMessageEvent textEvent) continue;
                     
+                    // Deduplicate
+                    if (dbContext.HandledEvents.Any(e => e.EventId == textEvent.EventId)) continue;
+
                     var roomId = textEvent.RoomId;
                     var senderId = textEvent.SenderUserId;
                     var message = textEvent.Message;
@@ -56,13 +67,19 @@ namespace ComputerBot
                     {
                         Console.WriteLine($"Command from {senderId} in {roomId}: {message}");
                         await HandleRandCaps(client, collection, roomId);
+
+                        // Mark handled
+                        dbContext.HandledEvents.Add(new HandledEvent 
+                        { 
+                            EventId = textEvent.EventId, 
+                            ProcessedAt = DateTime.UtcNow 
+                        });
+                        await dbContext.SaveChangesAsync();
                     }
                 }
             };
 
             Console.WriteLine($"Logging in as {user} on {hs}...");
-            
-            // Note: LoginAsync might expect Uri or string depending on version. Sample says (Uri, user, pass, deviceId)
             await client.LoginAsync(new Uri(hs), user, pass, "computer-bot");
             
             client.Start();
@@ -76,12 +93,11 @@ namespace ComputerBot
             try 
             {
                 var filterBuilder = Builders<BsonDocument>.Filter;
-                // Regex: Start with non-lowercase, end with non-lowercase (effectively all caps or symbols)
+                // Regex: Start with non-lowercase, end with non-lowercase
                 var filter = filterBuilder.Regex("content.body", new BsonRegularExpression("^[^a-z]+$")) &
                              filterBuilder.Eq("type", "m.room.message") &
                              filterBuilder.Nin("sender", Blacklist);
 
-                // Sample 50 candidates
                 var pipeline = new EmptyPipelineDefinition<BsonDocument>()
                     .Match(filter)
                     .Sample(50);
@@ -91,7 +107,7 @@ namespace ComputerBot
                 var valid = candidates
                     .Select(doc => doc["content"]["body"].AsString)
                     .Where(body => body.Length > 10)
-                    .Where(body => body.Count(char.IsLetter) / (double)body.Length >= 0.6) // 60% alpha
+                    .Where(body => body.Count(char.IsLetter) / (double)body.Length >= 0.6)
                     .ToList();
 
                 if (valid.Count > 0)
@@ -99,18 +115,19 @@ namespace ComputerBot
                     var rand = new Random();
                     var choice = valid[rand.Next(valid.Count)];
                     Console.WriteLine($"Selected: {choice}");
-                    await client.SendMessageAsync(roomId, $"```\n{choice}\n```");
+                    // Single backticks
+                    await client.SendMessageAsync(roomId, $"`{choice}`");
                 }
                 else
                 {
                     Console.WriteLine("No candidates found after filtering");
-                    await client.SendMessageAsync(roomId, "```\nNO SCREAMING FOUND\n```");
+                    await client.SendMessageAsync(roomId, "`NO SCREAMING FOUND`");
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error: {ex}");
-                await client.SendMessageAsync(roomId, $"Error: {ex.Message}");
+                await client.SendMessageAsync(roomId, $"`Error: {ex.Message}`");
             }
         }
     }
