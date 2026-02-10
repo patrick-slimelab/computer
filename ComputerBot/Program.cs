@@ -12,7 +12,7 @@ namespace ComputerBot
 {
     class Program
     {
-        private static readonly string[] Blacklist = {
+        private static readonly string[] BaseBlacklist = {
             "@fish:cclub.cs.wmich.edu",
             "@rustix:cclub.cs.wmich.edu",
             "@gooey:cclub.cs.wmich.edu"
@@ -30,6 +30,13 @@ namespace ComputerBot
             {
                 Console.WriteLine("Missing MATRIX_USER_ID or MATRIX_PASSWORD");
                 return;
+            }
+
+            // Build full blacklist including self
+            var blacklist = BaseBlacklist.ToList();
+            if (!string.IsNullOrEmpty(user) && !blacklist.Contains(user))
+            {
+                blacklist.Add(user);
             }
 
             // Init DB
@@ -66,7 +73,7 @@ namespace ComputerBot
                     if (message.Trim().StartsWith("!randcaps"))
                     {
                         Console.WriteLine($"Command from {senderId} in {roomId}: {message}");
-                        await HandleRandCaps(client, collection, roomId);
+                        await HandleRandCaps(client, collection, roomId, blacklist);
 
                         // Mark handled
                         dbContext.HandledEvents.Add(new HandledEvent 
@@ -88,7 +95,7 @@ namespace ComputerBot
             await Task.Delay(-1);
         }
 
-        static async Task HandleRandCaps(IMatrixClient client, IMongoCollection<BsonDocument> collection, string roomId)
+        static async Task HandleRandCaps(IMatrixClient client, IMongoCollection<BsonDocument> collection, string roomId, IEnumerable<string> blacklist)
         {
             try 
             {
@@ -96,7 +103,7 @@ namespace ComputerBot
                 // Regex: Start with non-lowercase, end with non-lowercase
                 var filter = filterBuilder.Regex("content.body", new BsonRegularExpression("^[^a-z]+$")) &
                              filterBuilder.Eq("type", "m.room.message") &
-                             filterBuilder.Nin("sender", Blacklist);
+                             filterBuilder.Nin("sender", blacklist);
 
                 var pipeline = new EmptyPipelineDefinition<BsonDocument>()
                     .Match(filter)
@@ -115,7 +122,6 @@ namespace ComputerBot
                     var rand = new Random();
                     var choice = valid[rand.Next(valid.Count)];
                     Console.WriteLine($"Selected: {choice}");
-                    // Single backticks
                     await client.SendMessageAsync(roomId, $"`{choice}`");
                 }
                 else
