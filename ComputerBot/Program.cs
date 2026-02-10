@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.IO;
+using Microsoft.EntityFrameworkCore;
 using Matrix.Sdk;
 using Matrix.Sdk.Core.Domain.RoomEvent;
 using MongoDB.Bson;
@@ -33,6 +34,14 @@ namespace ComputerBot
             using (var dbContext = new BotDbContext())
             {
                 dbContext.Database.EnsureCreated();
+                // Migration hack: Ensure ImageChannelMappings exists
+                dbContext.Database.ExecuteSqlRaw(@"
+                    CREATE TABLE IF NOT EXISTS ""ImageChannelMappings"" (
+                        ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ImageChannelMappings"" PRIMARY KEY AUTOINCREMENT,
+                        ""SourceRoomId"" TEXT NULL,
+                        ""TargetRoomId"" TEXT NULL
+                    );
+                ");
             }
 
             // Init Mongo
