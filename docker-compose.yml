@@ -1,0 +1,11 @@
+services:
+  computer:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - doghouse_default
+
+networks:
+  doghouse_default:
+    external: true
