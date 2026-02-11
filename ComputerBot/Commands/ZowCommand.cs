@@ -55,26 +55,8 @@ namespace ComputerBot.Commands
             await image.SaveAsPngAsync(ms);
             var bytes = ms.ToArray();
 
-            await SendImageWithRouting(ctx, $"zow_{seed}.png", bytes);
-        }
-
-        private async Task SendImageWithRouting(CommandContext ctx, string filename, byte[] data)
-        {
-            var mapping = ctx.Db.ImageChannelMappings.FirstOrDefault(m => m.SourceRoomId == ctx.RoomId);
-            string targetRoom = ctx.RoomId;
-            
-            if (mapping != null)
-            {
-                targetRoom = mapping.TargetRoomId;
-            }
-
-            var eventId = await ctx.Client.SendImageAsync(targetRoom, filename, data);
-            
-            if (targetRoom != ctx.RoomId)
-            {
-                var link = $"https://matrix.to/#/{targetRoom}/{eventId}";
-                await ctx.Client.SendMessageAsync(ctx.RoomId, $"`Image posted to image channel`: {link}");
-            }
+            await ctx.ImageRouter.SendImageWithRoutingAsync(ctx.Client, ctx.Db, ctx.RoomId, $"zow_{seed}.png", bytes);
+            Console.WriteLine($"Sent ZOW {seed}");
         }
     }
 }

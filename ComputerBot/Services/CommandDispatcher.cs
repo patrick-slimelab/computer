@@ -16,6 +16,7 @@ namespace ComputerBot.Services
         private readonly Dictionary<string, ICommand> _commands = new();
         private readonly MatrixService _matrix;
         private readonly IMongoCollection<BsonDocument> _events;
+        private readonly ImageRouter _imageRouter = new();
 
         public CommandDispatcher(MatrixService matrix, IMongoCollection<BsonDocument> events)
         {
@@ -64,7 +65,8 @@ namespace ComputerBot.Services
                         textEvent.RoomId,
                         textEvent.SenderUserId,
                         args,
-                        _matrix
+                        _matrix,
+                        _imageRouter
                     );
                     
                     await cmd.ExecuteAsync(ctx);

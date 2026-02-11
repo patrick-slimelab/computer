@@ -14,7 +14,8 @@ namespace ComputerBot.Abstractions
         string RoomId,
         string SenderId,
         string Args,
-        MatrixService MatrixService
+        MatrixService MatrixService,
+        ImageRouter ImageRouter
     );
 
     public interface ICommand
