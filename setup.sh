@@ -35,6 +35,8 @@ MONGO_URI=${MONGO_URI:-mongodb://scoob-doghouse-mongo:27017}
 read -r -p "Root User ID (for privileged commands) [@slimeq:cclub.cs.wmich.edu]: " ROOT_USER
 ROOT_USER=${ROOT_USER:-@slimeq:cclub.cs.wmich.edu}
 
+read -r -p "Stable Diffusion Auth (user:pass) [empty]: " SD_AUTH
+
 echo "Writing .env..."
 cat > .env <<EOF
 MATRIX_HOMESERVER=$HS
@@ -43,6 +45,7 @@ MATRIX_PASSWORD=$PASSWORD
 MONGODB_URI=$MONGO_URI
 MONGODB_DB=matrix_index
 ROOT_USER_ID=$ROOT_USER
+SD_AUTH=$SD_AUTH
 EOF
 
 echo "Building and starting..."

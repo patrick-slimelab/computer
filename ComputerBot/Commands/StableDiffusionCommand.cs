@@ -5,6 +5,9 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ComputerBot.Abstractions;
 
+using System.Net.Http.Headers;
+using System.Threading;
+
 namespace ComputerBot.Commands
 {
     public class StableDiffusionCommand : ICommand
@@ -22,8 +25,8 @@ namespace ComputerBot.Commands
             }
 
             Console.WriteLine($"SD Prompt: {prompt}");
-            // Optional: send typing or "Generating..."
-            
+            await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating...`");
+
             try
             {
                 var payload = new
@@ -38,10 +41,21 @@ namespace ComputerBot.Commands
                 var json = JsonSerializer.Serialize(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 
-                // 10 minute timeout for slow generations
-                _http.Timeout = TimeSpan.FromMinutes(10);
+                var request = new HttpRequestMessage(HttpMethod.Post, "http://robokrabs:7860/sdapi/v1/txt2img");
+                request.Content = content;
+
+                var auth = Environment.GetEnvironmentVariable("SD_AUTH");
+                if (!string.IsNullOrEmpty(auth))
+                {
+                    var bytes = Encoding.UTF8.GetBytes(auth);
+                    var header = Convert.ToBase64String(bytes);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic", header);
+                }
+
+                // 10 minute timeout
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
                 
-                var response = await _http.PostAsync("http://robokrabs:7860/sdapi/v1/txt2img", content);
+                var response = await _http.SendAsync(request, cts.Token);
                 response.EnsureSuccessStatusCode();
 
                 var respJson = await response.Content.ReadAsStringAsync();
