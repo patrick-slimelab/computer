@@ -64,8 +64,8 @@ namespace ComputerBot.Commands
                     
                     if (body.Length > 80) body = body.Substring(0, 77) + "...";
                     
-                    // Single line format
-                    sb.AppendLine($"`[{date}]` {sender}: {body} {link}");
+                    // Explicit newlines for spacing
+                    sb.Append($"`[{date}]` {sender}: {body} {link}\n\n");
                 }
 
                 await ctx.Client.SendMessageAsync(ctx.RoomId, sb.ToString());
