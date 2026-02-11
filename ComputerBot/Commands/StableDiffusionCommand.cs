@@ -50,8 +50,8 @@ namespace ComputerBot.Commands
                                 init_images = new[] { base64 },
                                 prompt = prompt,
                                 steps = 20,
-                                width = 512,
-                                height = 512,
+                                width = 1024,
+                                height = 1024,
                                 sampler_name = "Euler a",
                                 denoising_strength = 0.75
                             };
@@ -70,8 +70,8 @@ namespace ComputerBot.Commands
                     {
                         prompt = prompt,
                         steps = 20,
-                        width = 512,
-                        height = 512,
+                        width = 1024,
+                        height = 1024,
                         sampler_name = "Euler a"
                     };
                 }
