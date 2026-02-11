@@ -15,7 +15,8 @@ namespace ComputerBot.Abstractions
         string SenderId,
         string Args,
         MatrixService MatrixService,
-        ImageRouter ImageRouter
+        ImageRouter ImageRouter,
+        string? ReplyToEventId = null
     );
 
     public interface ICommand

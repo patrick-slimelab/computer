@@ -66,7 +66,8 @@ namespace ComputerBot.Services
                         textEvent.SenderUserId,
                         args,
                         _matrix,
-                        _imageRouter
+                        _imageRouter,
+                        textEvent.ReplyToEventId
                     );
                     
                     await cmd.ExecuteAsync(ctx);

@@ -7,6 +7,7 @@ using ComputerBot.Abstractions;
 
 using System.Net.Http.Headers;
 using System.Threading;
+using Matrix.Sdk.Core.Domain.RoomEvent;
 
 namespace ComputerBot.Commands
 {
@@ -29,19 +30,56 @@ namespace ComputerBot.Commands
 
             try
             {
-                var payload = new
+                string endpoint = "http://robokrabs:7860/sdapi/v1/txt2img";
+                object payload = null;
+
+                // Check for img2img
+                if (!string.IsNullOrEmpty(ctx.ReplyToEventId))
                 {
-                    prompt = prompt,
-                    steps = 20,
-                    width = 512,
-                    height = 512,
-                    sampler_name = "Euler a"
-                };
+                    try 
+                    {
+                        var replyEvent = await ctx.Client.GetEvent(ctx.ReplyToEventId);
+                        if (replyEvent is ImageMessageEvent imgEvent)
+                        {
+                            var bytes = await ctx.Client.GetMxcImage(imgEvent.MxcUrl);
+                            var base64 = Convert.ToBase64String(bytes);
+                            
+                            endpoint = "http://robokrabs:7860/sdapi/v1/img2img";
+                            payload = new
+                            {
+                                init_images = new[] { base64 },
+                                prompt = prompt,
+                                steps = 20,
+                                width = 512,
+                                height = 512,
+                                sampler_name = "Euler a",
+                                denoising_strength = 0.75
+                            };
+                            Console.WriteLine("Using img2img mode");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to fetch reply image: {ex.Message}");
+                    }
+                }
+
+                if (payload == null)
+                {
+                    payload = new
+                    {
+                        prompt = prompt,
+                        steps = 20,
+                        width = 512,
+                        height = 512,
+                        sampler_name = "Euler a"
+                    };
+                }
 
                 var json = JsonSerializer.Serialize(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 
-                var request = new HttpRequestMessage(HttpMethod.Post, "http://robokrabs:7860/sdapi/v1/txt2img");
+                var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 request.Content = content;
 
                 var auth = Environment.GetEnvironmentVariable("SD_AUTH");
