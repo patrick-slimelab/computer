@@ -17,9 +17,19 @@ namespace ComputerBot.Services
         public string AccessToken { get; private set; } = string.Empty;
         public string HomeserverUrl { get; private set; } = string.Empty;
         
-        public string MediaUrl => !string.IsNullOrEmpty(_mediaUrlOverride) 
-            ? _mediaUrlOverride.TrimEnd('/') 
-            : HomeserverUrl;
+        public string MediaUrl
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(_mediaUrlOverride) || 
+                    _mediaUrlOverride.Equals("none", StringComparison.OrdinalIgnoreCase) || 
+                    _mediaUrlOverride.Equals("empty", StringComparison.OrdinalIgnoreCase))
+                {
+                    return HomeserverUrl;
+                }
+                return _mediaUrlOverride.TrimEnd('/');
+            }
+        }
         
         public IMatrixClient Client { get; }
 

@@ -59,6 +59,10 @@ SD_AUTH=${SD_AUTH:-$EXISTING_SD_AUTH}
 read -r -p "Matrix Media URL Override [${EXISTING_MEDIA:-empty}]: " MEDIA_URL
 MEDIA_URL=${MEDIA_URL:-$EXISTING_MEDIA}
 
+if [[ "$MEDIA_URL" == "none" || "$MEDIA_URL" == "empty" || "$MEDIA_URL" == "clear" ]]; then
+  MEDIA_URL=""
+fi
+
 echo "Writing .env..."
 cat > .env <<EOF
 MATRIX_HOMESERVER=$HS
