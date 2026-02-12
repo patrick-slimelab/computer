@@ -36,11 +36,15 @@ namespace ComputerBot.Commands
                 // Check for img2img
                 if (!string.IsNullOrEmpty(ctx.ReplyToEventId))
                 {
+                    Console.WriteLine($"Processing reply to {ctx.ReplyToEventId}");
                     try 
                     {
                         var replyEvent = await ctx.Client.GetEvent(ctx.ReplyToEventId);
+                        Console.WriteLine($"Reply event is {replyEvent?.GetType().Name}");
+
                         if (replyEvent is ImageMessageEvent imgEvent)
                         {
+                            await ctx.Client.SendMessageAsync(ctx.RoomId, "`Found image in reply, using img2img...`");
                             var bytes = await ctx.Client.GetMxcImage(imgEvent.MxcUrl);
                             var base64 = Convert.ToBase64String(bytes);
                             
@@ -55,7 +59,10 @@ namespace ComputerBot.Commands
                                 sampler_name = "Euler a",
                                 denoising_strength = 0.75
                             };
-                            Console.WriteLine("Using img2img mode");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Reply event is not an image.");
                         }
                     }
                     catch (Exception ex)
