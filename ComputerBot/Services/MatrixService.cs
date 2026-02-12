@@ -42,8 +42,13 @@ namespace ComputerBot.Services
 
         public async Task LoginAsync(Uri hs, string user, string pass)
         {
-            Console.WriteLine($"Logging in as {user} on {hs}...");
-            var resp = await Client.LoginAsync(hs, user, pass, "computer-bot");
+            var username = user;
+            if (username.StartsWith("@") && username.Contains(":"))
+            {
+                username = username.Substring(1).Split(':')[0];
+            }
+            Console.WriteLine($"Logging in as {username} on {hs}...");
+            var resp = await Client.LoginAsync(hs, username, pass, "computer-bot");
             AccessToken = resp.AccessToken;
             HomeserverUrl = hs.AbsoluteUri.TrimEnd('/');
             Client.Start();
