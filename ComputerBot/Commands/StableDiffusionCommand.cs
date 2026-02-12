@@ -44,6 +44,7 @@ namespace ComputerBot.Commands
 
                         if (replyEvent is ImageMessageEvent imgEvent)
                         {
+                            Console.WriteLine($"Downloading {imgEvent.MxcUrl}");
                             await ctx.Client.SendMessageAsync(ctx.RoomId, "`Found image in reply, using img2img...`");
                             var bytes = await ctx.Client.GetMxcImage(imgEvent.MxcUrl);
                             var base64 = Convert.ToBase64String(bytes);
@@ -68,6 +69,7 @@ namespace ComputerBot.Commands
                     catch (Exception ex)
                     {
                         Console.WriteLine($"Failed to fetch reply image: {ex.Message}");
+                        await ctx.Client.SendMessageAsync(ctx.RoomId, $"`Warning: Could not download reply image. Falling back to text-to-image...`");
                     }
                 }
 
