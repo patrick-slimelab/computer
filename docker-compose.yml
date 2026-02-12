@@ -5,8 +5,19 @@ services:
     env_file: .env
     volumes:
       - computer_data:/app/data
+    depends_on:
+      - comfyui
     networks:
       - doghouse_default
+
+  comfyui:
+    image: runpod/comfyui:latest
+    restart: unless-stopped
+    gpus: all
+    networks:
+      - doghouse_default
+    ports:
+      - "8188:8188"
 
 networks:
   doghouse_default:
@@ -14,3 +25,5 @@ networks:
 
 volumes:
   computer_data:
+  comfy_models:
+  comfy_output:
