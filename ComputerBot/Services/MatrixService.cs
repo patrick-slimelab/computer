@@ -12,9 +12,14 @@ namespace ComputerBot.Services
     {
         private readonly HttpClient _http = new HttpClient();
         private readonly IMongoCollection<BsonDocument> _events;
+        private readonly string _mediaUrlOverride;
         
         public string AccessToken { get; private set; } = string.Empty;
         public string HomeserverUrl { get; private set; } = string.Empty;
+        
+        public string MediaUrl => !string.IsNullOrEmpty(_mediaUrlOverride) 
+            ? _mediaUrlOverride.TrimEnd('/') 
+            : HomeserverUrl;
         
         public IMatrixClient Client { get; }
 
@@ -22,6 +27,7 @@ namespace ComputerBot.Services
         {
             Client = client;
             _events = events;
+            _mediaUrlOverride = Environment.GetEnvironmentVariable("MATRIX_MEDIA_URL");
         }
 
         public async Task LoginAsync(Uri hs, string user, string pass)
@@ -44,7 +50,7 @@ namespace ComputerBot.Services
             var server = parts[0];
             var mediaId = parts[1];
             
-            var url = $"{HomeserverUrl}/_matrix/media/v3/download/{server}/{mediaId}";
+            var url = $"{MediaUrl}/_matrix/media/v3/download/{server}/{mediaId}";
             Console.WriteLine($"Downloading media from: {url}");
             
             var req = new HttpRequestMessage(HttpMethod.Get, url);
