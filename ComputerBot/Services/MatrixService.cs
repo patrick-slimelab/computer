@@ -12,8 +12,9 @@ namespace ComputerBot.Services
     {
         private readonly HttpClient _http = new HttpClient();
         private readonly IMongoCollection<BsonDocument> _events;
-        public string AccessToken { get; private set; }
-        public string HomeserverUrl { get; private set; }
+        
+        public string AccessToken { get; private set; } = string.Empty;
+        public string HomeserverUrl { get; private set; } = string.Empty;
         
         public IMatrixClient Client { get; }
 
@@ -65,7 +66,6 @@ namespace ComputerBot.Services
                 {
                     Console.WriteLine($"Resolving {aliasOrId} via MongoDB...");
                     
-                    // Match m.room.canonical_alias
                     var canonical = await _events.Find(
                         Builders<BsonDocument>.Filter.Eq("content.alias", aliasOrId)
                     ).Project("{room_id: 1}").FirstOrDefaultAsync();
@@ -77,7 +77,6 @@ namespace ComputerBot.Services
                         return id;
                     }
 
-                    // Match m.room.aliases list
                     var aliases = await _events.Find(
                         Builders<BsonDocument>.Filter.Eq("content.aliases", aliasOrId)
                     ).Project("{room_id: 1}").FirstOrDefaultAsync();
@@ -101,10 +100,10 @@ namespace ComputerBot.Services
                 try 
                 {
                     var encoded = Uri.EscapeDataString(aliasOrId);
-                    var url = $"{_homeserverUrl}/_matrix/client/v3/directory/room/{encoded}";
+                    var url = $"{HomeserverUrl}/_matrix/client/v3/directory/room/{encoded}";
                     
                     var req = new HttpRequestMessage(HttpMethod.Get, url);
-                    req.Headers.Add("Authorization", $"Bearer {_accessToken}");
+                    req.Headers.Add("Authorization", $"Bearer {AccessToken}");
                     
                     var res = await _http.SendAsync(req);
                     if (res.IsSuccessStatusCode)
@@ -126,13 +125,13 @@ namespace ComputerBot.Services
                 }
             }
 
-            // 3. Fallback to Manual JOIN (v3 POST) - Last resort for unindexed rooms
+            // 3. Fallback to Manual JOIN (v3 POST)
             try 
             {
-                var joinUrl = $"{_homeserverUrl}/_matrix/client/v3/join/{Uri.EscapeDataString(aliasOrId)}";
+                var joinUrl = $"{HomeserverUrl}/_matrix/client/v3/join/{Uri.EscapeDataString(aliasOrId)}";
                 var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
                 var req = new HttpRequestMessage(HttpMethod.Post, joinUrl);
-                req.Headers.Add("Authorization", $"Bearer {_accessToken}");
+                req.Headers.Add("Authorization", $"Bearer {AccessToken}");
                 req.Content = content;
                 
                 var res = await _http.SendAsync(req);
