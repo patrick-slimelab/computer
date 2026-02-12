@@ -46,7 +46,7 @@ namespace ComputerBot.Commands
                         {
                             Console.WriteLine($"Downloading {imgEvent.MxcUrl}");
                             await ctx.Client.SendMessageAsync(ctx.RoomId, "`Found image in reply, using img2img...`");
-                            var bytes = await ctx.Client.GetMxcImage(imgEvent.MxcUrl);
+                            var bytes = await ctx.MatrixService.DownloadMxc(imgEvent.MxcUrl);
                             var base64 = Convert.ToBase64String(bytes);
                             
                             endpoint = "http://robokrabs:7860/sdapi/v1/img2img";

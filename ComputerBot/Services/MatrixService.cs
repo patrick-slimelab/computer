@@ -12,8 +12,8 @@ namespace ComputerBot.Services
     {
         private readonly HttpClient _http = new HttpClient();
         private readonly IMongoCollection<BsonDocument> _events;
-        private string _accessToken;
-        private string _homeserverUrl;
+        public string AccessToken { get; private set; }
+        public string HomeserverUrl { get; private set; }
         
         public IMatrixClient Client { get; }
 
@@ -27,9 +27,31 @@ namespace ComputerBot.Services
         {
             Console.WriteLine($"Logging in as {user} on {hs}...");
             var resp = await Client.LoginAsync(hs, user, pass, "computer-bot");
-            _accessToken = resp.AccessToken;
-            _homeserverUrl = hs.AbsoluteUri.TrimEnd('/');
+            AccessToken = resp.AccessToken;
+            HomeserverUrl = hs.AbsoluteUri.TrimEnd('/');
             Client.Start();
+        }
+
+        public async Task<byte[]> DownloadMxc(string mxcUrl)
+        {
+            if (string.IsNullOrEmpty(mxcUrl) || !mxcUrl.StartsWith("mxc://")) 
+                throw new Exception($"Invalid MXC URL: {mxcUrl}");
+
+            var parts = mxcUrl.Substring(6).Split('/');
+            if (parts.Length < 2) throw new Exception($"Malformed MXC URL: {mxcUrl}");
+            
+            var server = parts[0];
+            var mediaId = parts[1];
+            
+            var url = $"{HomeserverUrl}/_matrix/media/v3/download/{server}/{mediaId}";
+            
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("Authorization", $"Bearer {AccessToken}");
+            
+            var response = await _http.SendAsync(req);
+            response.EnsureSuccessStatusCode();
+            
+            return await response.Content.ReadAsByteArrayAsync();
         }
 
         public async Task<string> ResolveRoomId(string aliasOrId)
