@@ -179,7 +179,7 @@ namespace ComputerBot.Commands
               "12": {"inputs": {"unet_name": "flux1-schnell-fp8.safetensors", "weight_dtype": "default"}, "class_type": "UNETLoader"},
               "13": {"inputs": {"noise": ["25", 0], "guider": ["22", 0], "sampler": ["16", 0], "sigmas": ["17", 0], "latent_image": ["5", 0]}, "class_type": "SamplerCustomAdvanced"},
               "16": {"inputs": {"sampler_name": "euler"}, "class_type": "KSamplerSelect"},
-              "17": {"inputs": {"scheduler": "simple", "steps": 4, "denoise": 1.0, "model": ["12", 0]}, "class_type": "BasicScheduler"},
+              "17": {"inputs": {"scheduler": "simple", "steps": 8, "denoise": 1.0, "model": ["12", 0]}, "class_type": "BasicScheduler"},
               "22": {"inputs": {"model": ["12", 0], "conditioning": ["6", 0]}, "class_type": "BasicGuider"},
               "25": {"inputs": {"noise_seed": 1}, "class_type": "RandomNoise"}
             }
