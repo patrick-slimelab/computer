@@ -174,7 +174,7 @@ namespace ComputerBot.Commands
               "6": {"inputs": {"text": "PROMPT_HERE", "clip": ["11", 0]}, "class_type": "CLIPTextEncode"},
               "8": {"inputs": {"samples": ["13", 0], "vae": ["10", 0]}, "class_type": "VAEDecode"},
               "9": {"inputs": {"filename_prefix": "ComputerBot", "images": ["8", 0]}, "class_type": "SaveImage"},
-              "10": {"inputs": {"vae_name": "flux-vae-bf16.safetensors"}, "class_type": "VAELoader"},
+              "10": {"inputs": {"vae_name": "ae.safetensors"}, "class_type": "VAELoader"},
               "11": {"inputs": {"clip_name1": "t5xxl_fp16.safetensors", "clip_name2": "clip_l.safetensors", "type": "flux"}, "class_type": "DualCLIPLoader"},
               "12": {"inputs": {"unet_name": "flux1-schnell-fp8.safetensors", "weight_dtype": "default"}, "class_type": "UNETLoader"},
               "13": {"inputs": {"noise": ["25", 0], "guider": ["22", 0], "sampler": ["16", 0], "sigmas": ["17", 0], "latent_image": ["5", 0]}, "class_type": "SamplerCustomAdvanced"},
