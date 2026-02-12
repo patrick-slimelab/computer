@@ -55,7 +55,8 @@ namespace ComputerBot.Services
             
             var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Add("Authorization", $"Bearer {AccessToken}");
-            req.Headers.Add("User-Agent", "ComputerBot/1.0 (OpenPaw)");
+            req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            req.Headers.Add("Accept", "*/*");
             
             var response = await _http.SendAsync(req);
             
