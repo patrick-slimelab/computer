@@ -45,12 +45,18 @@ namespace ComputerBot.Services
             var mediaId = parts[1];
             
             var url = $"{HomeserverUrl}/_matrix/media/v3/download/{server}/{mediaId}";
+            Console.WriteLine($"Downloading media from: {url}");
             
             var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Add("Authorization", $"Bearer {AccessToken}");
             
             var response = await _http.SendAsync(req);
-            response.EnsureSuccessStatusCode();
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                throw new Exception($"HTTP {response.StatusCode}: {errorBody}");
+            }
             
             return await response.Content.ReadAsByteArrayAsync();
         }
