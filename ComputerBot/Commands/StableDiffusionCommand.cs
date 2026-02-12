@@ -17,7 +17,7 @@ namespace ComputerBot.Commands
         public virtual string Trigger => "!sd";
         private static readonly HttpClient _http = new HttpClient();
 
-        private static string GetSdBaseUrl()
+        protected virtual string GetSdBaseUrl()
         {
             var baseUrl = Environment.GetEnvironmentVariable("SD_API_BASE");
             if (string.IsNullOrWhiteSpace(baseUrl))
@@ -27,7 +27,7 @@ namespace ComputerBot.Commands
             return baseUrl.TrimEnd('/');
         }
 
-        private static bool UseComfyBackend(string baseUrl)
+        protected virtual bool UseComfyBackend(string baseUrl)
         {
             var backend = Environment.GetEnvironmentVariable("SD_BACKEND");
             if (!string.IsNullOrWhiteSpace(backend) && backend.Equals("comfy", StringComparison.OrdinalIgnoreCase))
@@ -239,5 +239,25 @@ namespace ComputerBot.Commands
     public class DrawCommand : StableDiffusionCommand
     {
         public override string Trigger => "!draw";
+    }
+
+    public class FluxCommand : StableDiffusionCommand
+    {
+        public override string Trigger => "!flux";
+
+        protected override string GetSdBaseUrl()
+        {
+            var baseUrl = Environment.GetEnvironmentVariable("FLUX_API_BASE");
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                baseUrl = "http://comfyui:8188";
+            }
+            return baseUrl.TrimEnd('/');
+        }
+
+        protected override bool UseComfyBackend(string baseUrl)
+        {
+            return true;
+        }
     }
 }
