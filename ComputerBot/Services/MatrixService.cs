@@ -65,7 +65,7 @@ namespace ComputerBot.Services
             var server = parts[0];
             var mediaId = parts[1];
             
-            var url = $"{MediaUrl}/_matrix/media/v3/download/{server}/{mediaId}?allow_redirect=true";
+            var url = $"{MediaUrl}/_matrix/client/v1/media/download/{server}/{mediaId}?allow_redirect=true";
             Console.WriteLine($"Downloading media from: {url}");
             
             var req = new HttpRequestMessage(HttpMethod.Get, url);
