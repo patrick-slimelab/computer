@@ -68,6 +68,19 @@ namespace ComputerBot
             };
 
             await matrixService.LoginAsync(new Uri(hs), user, pass);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(1500);
+                    await matrixService.AutoJoinPublicRoomsAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Auto-join worker failed: {ex.Message}");
+                }
+            });
             
             Console.WriteLine("Bot started (Refactored). Press Ctrl+C to exit.");
             await Task.Delay(-1);

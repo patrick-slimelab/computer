@@ -10,7 +10,7 @@ namespace ComputerBot.Commands
 {
     public class SearchCommand : ICommand
     {
-        public string Trigger => "!search";
+        public virtual string Trigger => "!search";
 
         public async Task ExecuteAsync(CommandContext ctx)
         {
