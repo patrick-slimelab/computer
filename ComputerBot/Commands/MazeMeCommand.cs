@@ -248,32 +248,8 @@ namespace ComputerBot.Commands
 
         private static void ApplyPalette(Image<Rgba32> image, string paletteName)
         {
-            if (!Palettes.TryGetValue(paletteName, out var hexes) || hexes.Length == 0) return;
-            var palette = hexes.Select(Color.ParseHex).ToArray();
-
-            var counts = new Dictionary<uint, int>();
-            image.ProcessPixelRows(accessor =>
-            {
-                for (int y = 0; y < accessor.Height; y++)
-                {
-                    var row = accessor.GetRowSpan(y);
-                    for (int x = 0; x < row.Length; x++)
-                    {
-                        var p = row[x];
-                        var key = ((uint)p.R << 24) | ((uint)p.G << 16) | ((uint)p.B << 8) | p.A;
-                        counts.TryGetValue(key, out var c);
-                        counts[key] = c + 1;
-                    }
-                }
-            });
-
-            var topColors = counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).ToList();
-            var map = new Dictionary<uint, Rgba32>();
-            for (int i = 0; i < topColors.Count; i++)
-            {
-                var target = palette[i % palette.Length].ToPixel<Rgba32>();
-                map[topColors[i]] = target;
-            }
+            if (!Palettes.TryGetValue(paletteName, out var hexes) || hexes.Length < 2) return;
+            var anchors = hexes.Select(h => Color.ParseHex(h).ToPixel<Rgba32>()).ToArray();
 
             image.ProcessPixelRows(accessor =>
             {
@@ -283,8 +259,26 @@ namespace ComputerBot.Commands
                     for (int x = 0; x < row.Length; x++)
                     {
                         var p = row[x];
-                        var key = ((uint)p.R << 24) | ((uint)p.G << 16) | ((uint)p.B << 8) | p.A;
-                        if (map.TryGetValue(key, out var mapped)) row[x] = mapped;
+
+                        // Smooth luminance-based gradient remap to avoid chunky posterization.
+                        var lum = (0.2126 * p.R + 0.7152 * p.G + 0.0722 * p.B) / 255.0;
+                        var t = Math.Clamp(lum, 0.0, 1.0);
+
+                        var scaled = t * (anchors.Length - 1);
+                        var i0 = (int)Math.Floor(scaled);
+                        var i1 = Math.Min(i0 + 1, anchors.Length - 1);
+                        var local = scaled - i0;
+
+                        var c0 = anchors[i0];
+                        var c1 = anchors[i1];
+
+                        byte Lerp(byte a, byte b, double tt) => (byte)Math.Clamp((int)Math.Round(a + (b - a) * tt), 0, 255);
+
+                        row[x] = new Rgba32(
+                            Lerp(c0.R, c1.R, local),
+                            Lerp(c0.G, c1.G, local),
+                            Lerp(c0.B, c1.B, local),
+                            p.A);
                     }
                 }
             });
