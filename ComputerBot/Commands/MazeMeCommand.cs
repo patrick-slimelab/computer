@@ -72,12 +72,14 @@ namespace ComputerBot.Commands
             {
                 var s = ReadUtf8(caller, ptr, len);
                 fillColor = ParseCssColor(s, fillColor);
+                Console.WriteLine($"MazeMe wasm fillStyle={s} parsed={fillColor}");
             }));
 
             linker.Define("env", "ctxStrokeStyle", Function.FromCallback(store, (Caller caller, int ptr, int len) =>
             {
                 var s = ReadUtf8(caller, ptr, len);
                 strokeColor = ParseCssColor(s, strokeColor);
+                Console.WriteLine($"MazeMe wasm strokeStyle={s} parsed={strokeColor}");
             }));
 
             linker.Define("env", "ctxSetSize", Function.FromCallback(store, (int width, int height) =>
