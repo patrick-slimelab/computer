@@ -86,7 +86,7 @@ namespace ComputerBot.Commands
                 image = new Image<Rgba32>(Math.Max(1, width), Math.Max(1, height), Color.Black);
             }));
 
-            linker.Define("env", "ctxFillRect", Function.FromCallback(store, (float x, float y, float w, float h) =>
+            linker.Define("env", "ctxFillRect", Function.FromCallback(store, (int x, int y, int w, int h) =>
             {
                 if (image == null) return;
                 image.Mutate(c => c.Fill(fillColor, new RectangleF(x, y, w, h)));
@@ -98,8 +98,8 @@ namespace ComputerBot.Commands
                 image.Mutate(c => c.Fill(fillColor));
             }));
 
-            // Important: preserve JS callback signature/order exactly: (x1, x2, y1, y2)
-            linker.Define("env", "ctxLine", Function.FromCallback(store, (float x1, float x2, float y1, float y2) =>
+            // Important: preserve callback argument order exactly: (x1, x2, y1, y2)
+            linker.Define("env", "ctxLine", Function.FromCallback(store, (int x1, int x2, int y1, int y2) =>
             {
                 if (image == null) return;
                 image.Mutate(c => c.DrawLine(strokeColor, 1.5f, new PointF(x1, y1), new PointF(x2, y2)));
