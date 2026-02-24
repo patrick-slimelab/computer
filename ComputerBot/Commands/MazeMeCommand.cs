@@ -21,15 +21,24 @@ namespace ComputerBot.Commands
         private static readonly HttpClient _http = new HttpClient();
         private const string WasmUrl = "https://dogspluspl.us/art/mazeme/zig-out/lib/masm.wasm";
         private const int TargetResolution = 1024;
+        private const int WideWidth = 1280;
+        private const int WideHeight = 720;
 
         public async Task ExecuteAsync(CommandContext ctx)
         {
-            var prompt = ctx.Args?.Trim() ?? string.Empty;
+            var rawArgs = ctx.Args?.Trim() ?? string.Empty;
+            var isWide = false;
+            var prompt = rawArgs;
+            if (!string.IsNullOrWhiteSpace(rawArgs) && rawArgs.Contains("--wide", StringComparison.OrdinalIgnoreCase))
+            {
+                isWide = true;
+                prompt = rawArgs.Replace("--wide", "", StringComparison.OrdinalIgnoreCase).Trim();
+            }
 
             try
             {
                 await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating maze...`");
-                var mazeBytes = await GenerateMazeFromWasmAsync();
+                var mazeBytes = await GenerateMazeFromWasmAsync(isWide);
 
                 if (string.IsNullOrWhiteSpace(prompt))
                 {
@@ -39,7 +48,7 @@ namespace ComputerBot.Commands
                 }
 
                 await ctx.Client.SendMessageAsync(ctx.RoomId, "`Running img2img on robokrabs...`");
-                var stylized = await Img2ImgAsync(mazeBytes, prompt);
+                var stylized = await Img2ImgAsync(mazeBytes, prompt, isWide);
                 var outName = $"mazeme_sd_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.png";
                 await ctx.ImageRouter.SendImageWithRoutingAsync(ctx.Client, ctx.Db, ctx.RoomId, outName, stylized);
             }
@@ -50,7 +59,7 @@ namespace ComputerBot.Commands
             }
         }
 
-        private static async Task<byte[]> GenerateMazeFromWasmAsync()
+        private static async Task<byte[]> GenerateMazeFromWasmAsync(bool wide)
         {
             var wasmPath = await EnsureWasmAsync();
 
@@ -121,19 +130,26 @@ namespace ComputerBot.Commands
 
             // Match requested defaults
             setSeed.Invoke(Random.Shared.Next(1, int.MaxValue));
-            setWidth.Invoke(64);
-            setHeight.Invoke(64);
-            setScale.Invoke(16);
+            var mazeW = wide ? 80 : 64;
+            var mazeH = wide ? 45 : 64;
+            var scale = 16;
+
+            setWidth.Invoke(mazeW);
+            setHeight.Invoke(mazeH);
+            setScale.Invoke(scale);
             setInset.Invoke(0.0);
             gen.Invoke();
 
             if (image == null) throw new Exception("WASM did not initialize canvas");
 
-            if (image.Width != TargetResolution || image.Height != TargetResolution)
+            var targetW = wide ? WideWidth : TargetResolution;
+            var targetH = wide ? WideHeight : TargetResolution;
+
+            if (image.Width != targetW || image.Height != targetH)
             {
                 image.Mutate(c => c.Resize(new ResizeOptions
                 {
-                    Size = new Size(TargetResolution, TargetResolution),
+                    Size = new Size(targetW, targetH),
                     Mode = ResizeMode.Stretch,
                     Sampler = KnownResamplers.NearestNeighbor
                 }));
@@ -201,9 +217,11 @@ namespace ComputerBot.Commands
             return baseUrl.TrimEnd('/');
         }
 
-        private static async Task<byte[]> Img2ImgAsync(byte[] initImage, string prompt)
+        private static async Task<byte[]> Img2ImgAsync(byte[] initImage, string prompt, bool wide)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            var outW = wide ? WideWidth : TargetResolution;
+            var outH = wide ? WideHeight : TargetResolution;
 
             var raw = Convert.ToBase64String(initImage);
             var attempts = new[] { raw, $"data:image/png;base64,{raw}" };
@@ -216,8 +234,8 @@ namespace ComputerBot.Commands
                     init_images = new[] { init },
                     prompt,
                     steps = 20,
-                    width = 1024,
-                    height = 1024,
+                    width = outW,
+                    height = outH,
                     sampler_name = "Euler a",
                     denoising_strength = 0.55
                 };
