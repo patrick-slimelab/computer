@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -8,11 +7,11 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ComputerBot.Abstractions;
-using Matrix.Sdk.Core.Domain.RoomEvent;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using Wasmtime;
 
 namespace ComputerBot.Commands
 {
@@ -20,13 +19,8 @@ namespace ComputerBot.Commands
     {
         public string Trigger => "!mazeme";
         private static readonly HttpClient _http = new HttpClient();
-
-        private const int ImageSize = 1024;
-        private const float Inset = 0f; // default requested
-
-        private enum Dir { N = 0, E = 1, S = 2, W = 3 }
-        private static readonly (int dx, int dy)[] Deltas = { (0, -1), (1, 0), (0, 1), (-1, 0) };
-        private static Dir Opposite(Dir d) => (Dir)(((int)d + 2) % 4);
+        private const string WasmUrl = "https://dogspluspl.us/art/mazeme/zig-out/lib/masm.wasm";
+        private const int TargetResolution = 1024;
 
         public async Task ExecuteAsync(CommandContext ctx)
         {
@@ -34,9 +28,8 @@ namespace ComputerBot.Commands
 
             try
             {
-                await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating maze...`");
-
-                var mazeBytes = GenerateMazePng();
+                await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating maze (spacedog wasm)...`");
+                var mazeBytes = await GenerateMazeFromWasmAsync();
 
                 if (string.IsNullOrWhiteSpace(prompt))
                 {
@@ -57,79 +50,145 @@ namespace ComputerBot.Commands
             }
         }
 
-        private static byte[] GenerateMazePng()
+        private static async Task<byte[]> GenerateMazeFromWasmAsync()
         {
-            // Square-ish maze tuned for 1024 output
-            const int widthCells = 48;
-            const int heightCells = 48;
-            var cellSize = ImageSize / (float)Math.Max(widthCells, heightCells);
+            var wasmPath = await EnsureWasmAsync();
 
-            var open = new bool[widthCells, heightCells, 4];
-            var visited = new bool[widthCells, heightCells];
-            var rng = new Random();
+            using var engine = new Engine();
+            using var module = Module.FromFile(engine, wasmPath);
+            using var store = new Store(engine);
+            using var linker = new Linker(engine);
 
-            Carve(0, 0, visited, open, rng, widthCells, heightCells);
+            Image<Rgba32>? image = null;
+            Color fillColor = Color.Black;
+            Color strokeColor = Color.White;
 
-            // spacedog-style vibe: random palette per generation
-            var bg = Color.FromRgb((byte)rng.Next(20, 236), (byte)rng.Next(20, 236), (byte)rng.Next(20, 236));
-            var wall = Color.FromRgb((byte)rng.Next(20, 236), (byte)rng.Next(20, 236), (byte)rng.Next(20, 236));
-            using var img = new Image<Rgba32>(ImageSize, ImageSize, bg);
-
-            // Fill cells optional style hook: keep white for now.
-
-            // Draw walls in black
-            img.Mutate(ctx =>
+            linker.Define("env", "consoleDebug", Function.FromCallback(store, (int ptr, int len) =>
             {
-                for (int y = 0; y < heightCells; y++)
+                // no-op for now
+            }));
+
+            linker.Define("env", "ctxFillStyle", Function.FromCallback(store, (Caller caller, int ptr, int len) =>
+            {
+                var s = ReadUtf8(caller, ptr, len);
+                fillColor = ParseCssColor(s, fillColor);
+            }));
+
+            linker.Define("env", "ctxStrokeStyle", Function.FromCallback(store, (Caller caller, int ptr, int len) =>
+            {
+                var s = ReadUtf8(caller, ptr, len);
+                strokeColor = ParseCssColor(s, strokeColor);
+            }));
+
+            linker.Define("env", "ctxSetSize", Function.FromCallback(store, (int width, int height) =>
+            {
+                image?.Dispose();
+                image = new Image<Rgba32>(Math.Max(1, width), Math.Max(1, height), Color.Black);
+            }));
+
+            linker.Define("env", "ctxFillRect", Function.FromCallback(store, (float x, float y, float w, float h) =>
+            {
+                if (image == null) return;
+                image.Mutate(c => c.Fill(fillColor, new RectangleF(x, y, w, h)));
+            }));
+
+            linker.Define("env", "ctxFillAll", Function.FromCallback(store, () =>
+            {
+                if (image == null) return;
+                image.Mutate(c => c.Fill(fillColor));
+            }));
+
+            // Important: preserve JS callback signature/order exactly: (x1, x2, y1, y2)
+            linker.Define("env", "ctxLine", Function.FromCallback(store, (float x1, float x2, float y1, float y2) =>
+            {
+                if (image == null) return;
+                image.Mutate(c => c.DrawLine(strokeColor, 1.5f, new PointF(x1, y1), new PointF(x2, y2)));
+            }));
+
+            var instance = linker.Instantiate(store, module);
+
+            var setSeed = instance.GetFunction("setSeed");
+            var setWidth = instance.GetFunction("setWidth");
+            var setHeight = instance.GetFunction("setHeight");
+            var setScale = instance.GetFunction("setScale");
+            var setInset = instance.GetFunction("setInset");
+            var gen = instance.GetFunction("gen");
+
+            if (setSeed == null || setWidth == null || setHeight == null || setScale == null || setInset == null || gen == null)
+                throw new Exception("mazeme wasm exports missing");
+
+            // Match requested defaults
+            setSeed.Invoke(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            setWidth.Invoke(64);
+            setHeight.Invoke(64);
+            setScale.Invoke(16);
+            setInset.Invoke(0.0);
+            gen.Invoke();
+
+            if (image == null) throw new Exception("WASM did not initialize canvas");
+
+            if (image.Width != TargetResolution || image.Height != TargetResolution)
+            {
+                image.Mutate(c => c.Resize(new ResizeOptions
                 {
-                    for (int x = 0; x < widthCells; x++)
-                    {
-                        var x0 = x * cellSize;
-                        var y0 = y * cellSize;
-                        var x1 = (x + 1) * cellSize;
-                        var y1 = (y + 1) * cellSize;
-
-                        var insetPx = Inset * cellSize;
-                        x0 += insetPx;
-                        y0 += insetPx;
-                        x1 -= insetPx;
-                        y1 -= insetPx;
-
-                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(wall, 3f, new PointF(x0, y0), new PointF(x1, y0));
-                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(wall, 3f, new PointF(x1, y0), new PointF(x1, y1));
-                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(wall, 3f, new PointF(x0, y1), new PointF(x1, y1));
-                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(wall, 3f, new PointF(x0, y0), new PointF(x0, y1));
-                    }
-                }
-            });
+                    Size = new Size(TargetResolution, TargetResolution),
+                    Mode = ResizeMode.Stretch,
+                    Sampler = KnownResamplers.NearestNeighbor
+                }));
+            }
 
             using var ms = new MemoryStream();
-            img.SaveAsPng(ms);
+            image.SaveAsPng(ms);
+            image.Dispose();
             return ms.ToArray();
         }
 
-        private static void Carve(int x, int y, bool[,] visited, bool[,,] open, Random rng, int w, int h)
+        private static async Task<string> EnsureWasmAsync()
         {
-            visited[x, y] = true;
+            var path = Path.Combine(Path.GetTempPath(), "mazeme_masm.wasm");
+            if (File.Exists(path) && new FileInfo(path).Length > 1024) return path;
+            var bytes = await _http.GetByteArrayAsync(WasmUrl);
+            await File.WriteAllBytesAsync(path, bytes);
+            return path;
+        }
 
-            var dirs = new List<Dir> { Dir.N, Dir.E, Dir.S, Dir.W };
-            for (int i = dirs.Count - 1; i > 0; i--)
+        private static string ReadUtf8(Caller caller, int ptr, int len)
+        {
+            var mem = caller.GetMemory("memory");
+            if (mem == null || len <= 0) return string.Empty;
+            if (ptr < 0 || len <= 0) return string.Empty;
+            var data = mem.GetSpan<byte>(ptr);
+            if (len > data.Length) return string.Empty;
+            return Encoding.UTF8.GetString(data.Slice(0, len));
+        }
+
+        private static Color ParseCssColor(string s, Color fallback)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return fallback;
+            s = s.Trim().ToLowerInvariant();
+
+            return s switch
             {
-                var j = rng.Next(i + 1);
-                (dirs[i], dirs[j]) = (dirs[j], dirs[i]);
-            }
+                "black" => Color.Black,
+                "white" => Color.White,
+                "red" => Color.Red,
+                "green" => Color.Green,
+                "blue" => Color.Blue,
+                "yellow" => Color.Yellow,
+                "cyan" => Color.Cyan,
+                "magenta" => Color.Magenta,
+                _ => TryParseHex(s, fallback)
+            };
+        }
 
-            foreach (var d in dirs)
+        private static Color TryParseHex(string s, Color fallback)
+        {
+            try
             {
-                var (dx, dy) = Deltas[(int)d];
-                var nx = x + dx;
-                var ny = y + dy;
-                if (nx < 0 || ny < 0 || nx >= w || ny >= h || visited[nx, ny]) continue;
-
-                open[x, y, (int)d] = true;
-                open[nx, ny, (int)Opposite(d)] = true;
-                Carve(nx, ny, visited, open, rng, w, h);
+                if (s.StartsWith("#")) return Color.ParseHex(s);
             }
+            catch { }
+            return fallback;
         }
 
         private static string GetSdBaseUrl()
@@ -143,7 +202,6 @@ namespace ComputerBot.Commands
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
 
-            // First try raw base64, then retry with data URL prefix for stricter backends.
             var raw = Convert.ToBase64String(initImage);
             var attempts = new[] { raw, $"data:image/png;base64,{raw}" };
 

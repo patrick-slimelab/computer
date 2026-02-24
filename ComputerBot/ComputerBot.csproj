@@ -13,6 +13,7 @@
     <PackageReference Include="MongoDB.Driver" Version="3.6.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.7" />
+    <PackageReference Include="Wasmtime" Version="22.0.0" />
   </ItemGroup>
 
   <PropertyGroup>
