@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -24,21 +26,50 @@ namespace ComputerBot.Commands
         private const int WideWidth = 1280;
         private const int WideHeight = 720;
 
+        private static readonly Dictionary<string, string[]> Palettes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["default"] = new[] { "#000000" }, // pass-through (handled specially)
+            ["synthwave"] = new[] { "#0B1026", "#2E1065", "#C026D3", "#22D3EE", "#FDE047" },
+            ["forest"] = new[] { "#0B3D20", "#14532D", "#4D7C0F", "#84CC16", "#ECFCCB" },
+            ["sunset"] = new[] { "#2D132C", "#801336", "#C72C41", "#EE4540", "#F7BE16" },
+            ["ocean"] = new[] { "#081C2A", "#0E7490", "#06B6D4", "#67E8F9", "#E0F2FE" },
+            ["mono"] = new[] { "#101010", "#333333", "#666666", "#BBBBBB", "#F5F5F5" }
+        };
+
         public async Task ExecuteAsync(CommandContext ctx)
         {
             var rawArgs = ctx.Args?.Trim() ?? string.Empty;
             var isWide = false;
+            var palette = "default";
             var prompt = rawArgs;
+
             if (!string.IsNullOrWhiteSpace(rawArgs) && rawArgs.Contains("--wide", StringComparison.OrdinalIgnoreCase))
             {
                 isWide = true;
-                prompt = rawArgs.Replace("--wide", "", StringComparison.OrdinalIgnoreCase).Trim();
+                prompt = prompt.Replace("--wide", "", StringComparison.OrdinalIgnoreCase).Trim();
+            }
+
+            foreach (var token in rawArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (token.StartsWith("--palette=", StringComparison.OrdinalIgnoreCase) || token.StartsWith("--pallete=", StringComparison.OrdinalIgnoreCase))
+                {
+                    var v = token[(token.IndexOf('=') + 1)..].Trim();
+                    if (!string.IsNullOrWhiteSpace(v)) palette = v;
+                    prompt = prompt.Replace(token, "", StringComparison.OrdinalIgnoreCase).Trim();
+                }
+            }
+
+            if (!Palettes.ContainsKey(palette))
+            {
+                var valid = string.Join(", ", Palettes.Keys.OrderBy(k => k));
+                await ctx.Client.SendMessageAsync(ctx.RoomId, $"`Unknown palette '{palette}'. Use one of: {valid}`");
+                return;
             }
 
             try
             {
                 await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating maze...`");
-                var mazeBytes = await GenerateMazeFromWasmAsync(isWide);
+                var mazeBytes = await GenerateMazeFromWasmAsync(isWide, palette);
 
                 if (string.IsNullOrWhiteSpace(prompt))
                 {
@@ -59,7 +90,7 @@ namespace ComputerBot.Commands
             }
         }
 
-        private static async Task<byte[]> GenerateMazeFromWasmAsync(bool wide)
+        private static async Task<byte[]> GenerateMazeFromWasmAsync(bool wide, string palette)
         {
             var wasmPath = await EnsureWasmAsync();
 
@@ -142,6 +173,11 @@ namespace ComputerBot.Commands
 
             if (image == null) throw new Exception("WASM did not initialize canvas");
 
+            if (!palette.Equals("default", StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyPalette(image, palette);
+            }
+
             var targetW = wide ? WideWidth : TargetResolution;
             var targetH = wide ? WideHeight : TargetResolution;
 
@@ -208,6 +244,50 @@ namespace ComputerBot.Commands
             {
                 return fallback;
             }
+        }
+
+        private static void ApplyPalette(Image<Rgba32> image, string paletteName)
+        {
+            if (!Palettes.TryGetValue(paletteName, out var hexes) || hexes.Length == 0) return;
+            var palette = hexes.Select(Color.ParseHex).ToArray();
+
+            var counts = new Dictionary<uint, int>();
+            image.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height; y++)
+                {
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        var p = row[x];
+                        var key = ((uint)p.R << 24) | ((uint)p.G << 16) | ((uint)p.B << 8) | p.A;
+                        counts.TryGetValue(key, out var c);
+                        counts[key] = c + 1;
+                    }
+                }
+            });
+
+            var topColors = counts.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).ToList();
+            var map = new Dictionary<uint, Rgba32>();
+            for (int i = 0; i < topColors.Count; i++)
+            {
+                var target = palette[i % palette.Length].ToPixel<Rgba32>();
+                map[topColors[i]] = target;
+            }
+
+            image.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height; y++)
+                {
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        var p = row[x];
+                        var key = ((uint)p.R << 24) | ((uint)p.G << 16) | ((uint)p.B << 8) | p.A;
+                        if (map.TryGetValue(key, out var mapped)) row[x] = mapped;
+                    }
+                }
+            });
         }
 
         private static string GetSdBaseUrl()
