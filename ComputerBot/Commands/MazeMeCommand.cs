@@ -70,7 +70,10 @@ namespace ComputerBot.Commands
 
             Carve(0, 0, visited, open, rng, widthCells, heightCells);
 
-            using var img = new Image<Rgba32>(ImageSize, ImageSize, Color.Black);
+            // spacedog-style vibe: random palette per generation
+            var bg = Color.FromRgb((byte)rng.Next(20, 236), (byte)rng.Next(20, 236), (byte)rng.Next(20, 236));
+            var wall = Color.FromRgb((byte)rng.Next(20, 236), (byte)rng.Next(20, 236), (byte)rng.Next(20, 236));
+            using var img = new Image<Rgba32>(ImageSize, ImageSize, bg);
 
             // Fill cells optional style hook: keep white for now.
 
@@ -92,10 +95,10 @@ namespace ComputerBot.Commands
                         x1 -= insetPx;
                         y1 -= insetPx;
 
-                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(Color.White, 3f, new PointF(x0, y0), new PointF(x1, y0));
-                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(Color.White, 3f, new PointF(x1, y0), new PointF(x1, y1));
-                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(Color.White, 3f, new PointF(x0, y1), new PointF(x1, y1));
-                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(Color.White, 3f, new PointF(x0, y0), new PointF(x0, y1));
+                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(wall, 3f, new PointF(x0, y0), new PointF(x1, y0));
+                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(wall, 3f, new PointF(x1, y0), new PointF(x1, y1));
+                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(wall, 3f, new PointF(x0, y1), new PointF(x1, y1));
+                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(wall, 3f, new PointF(x0, y0), new PointF(x0, y1));
                     }
                 }
             });
