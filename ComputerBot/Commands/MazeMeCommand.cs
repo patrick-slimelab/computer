@@ -169,9 +169,23 @@ namespace ComputerBot.Commands
             if (string.IsNullOrWhiteSpace(s)) return fallback;
             s = s.Trim();
 
+            // Common wasm output from mazeme: rgb(r,g,b)
+            if (s.StartsWith("rgb(", StringComparison.OrdinalIgnoreCase) && s.EndsWith(")"))
+            {
+                var inner = s.Substring(4, s.Length - 5);
+                var parts = inner.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 3 &&
+                    byte.TryParse(parts[0], out var r) &&
+                    byte.TryParse(parts[1], out var g) &&
+                    byte.TryParse(parts[2], out var b))
+                {
+                    return Color.FromRgb(r, g, b);
+                }
+            }
+
             try
             {
-                // Handles css names/hex/rgb()/rgba()/hsl()/hsla() when supported by ImageSharp parser.
+                // Fallback for named/hex strings if present.
                 return Color.Parse(s);
             }
             catch
