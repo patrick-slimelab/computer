@@ -286,71 +286,43 @@ namespace ComputerBot.Commands
 
         private static Rgba32[] BuildDynamicPalette(string paletteName)
         {
-            var seedHue = 270.0;
-            if (Palettes.TryGetValue(paletteName, out var hexes) && hexes.Length > 0)
+            // 10x10 matrix: rows are "roles" in the palette (dark bg -> bright accent),
+            // columns are coherent style variants. We pick (with jitter) a column sample per row.
+            string[][] matrix =
             {
-                var seed = Color.ParseHex(hexes[0]).ToPixel<Rgba32>();
-                seedHue = RgbToHue(seed);
-            }
-
-            // semi-random like spacedog: keep theme identity, vary each run
-            var jitter = Random.Shared.NextDouble() * 36.0 - 18.0;
-            var h = (seedHue + jitter + 360.0) % 360.0;
-
-            var hues = new[]
-            {
-                h,
-                (h + 180.0) % 360.0,   // complement
-                (h + 150.0) % 360.0,   // split complement 1
-                (h + 210.0) % 360.0,   // split complement 2
-                (h + 30.0) % 360.0     // warm/cool accent
+                new[] {"#07070A","#0A0A12","#081018","#101015","#0B1110","#120C09","#0D0A13","#0A1216","#121212","#0A0E0D"},
+                new[] {"#141423","#1A1630","#122335","#24222E","#173026","#311D14","#241A35","#173138","#2A2A2A","#193029"},
+                new[] {"#23233D","#2D2452","#1B3A56","#3B354A","#1F513D","#4A2D1F","#3A2B57","#215061","#434343","#275147"},
+                new[] {"#3A3A66","#43337B","#2A5C78","#5A4A72","#2C7A59","#6E4730","#563F84","#31728B","#646464","#3C7668"},
+                new[] {"#5656A0","#5F49B0","#3C83A4","#8A6FB0","#43A06C","#A56A42","#7C60BE","#4598B8","#878787","#53A08B"},
+                new[] {"#7878C8","#8468D2","#58A7C8","#B18DCE","#63C28C","#C98C59","#A182D8","#63BED6","#AAAAAA","#72C2A9"},
+                new[] {"#9B9BE6","#A08BEA","#79C5E1","#D1B0E3","#8BD9AE","#E1AE83","#C2A6EA","#8AD6E9","#C8C8C8","#98D9C5"},
+                new[] {"#BDBDF4","#C0B0F4","#A0DBEE","#E6CCE9","#B1E9CC","#ECC7AA","#D9C8F4","#B2E8F2","#DEDEDE","#BCE9DA"},
+                new[] {"#DDDDFB","#DED3FA","#C9EEF8","#F3E2F5","#D2F4E4","#F6DFC6","#EADFF9","#D3F3F8","#F0F0F0","#DCF4EA"},
+                new[] {"#F5F5FF","#F4F0FF","#EAF8FF","#FDF3FD","#ECFBF3","#FFF3E9","#F8F3FF","#EDF9FF","#FAFAFA","#EFFAF5"}
             };
 
-            var sats = new[] { 0.72, 0.84, 0.68, 0.78, 0.90 };
-            var lights = new[] { 0.10, 0.26, 0.42, 0.60, 0.78 };
-
-            var outColors = new Rgba32[hues.Length];
-            for (int i = 0; i < hues.Length; i++)
+            int baseCol = paletteName.ToLowerInvariant() switch
             {
-                var s = Math.Clamp(sats[i] + (Random.Shared.NextDouble() * 0.12 - 0.06), 0.45, 0.95);
-                var l = Math.Clamp(lights[i] + (Random.Shared.NextDouble() * 0.10 - 0.05), 0.06, 0.92);
-                outColors[i] = HslToRgb(hues[i], s, l);
+                "synthwave" => 1,
+                "ocean" => 2,
+                "mono" => 8,
+                "forest" => 4,
+                "sunset" => 5,
+                "spacedog" => 7,
+                _ => Random.Shared.Next(0, 10)
+            };
+
+            var colors = new Rgba32[matrix.Length];
+            for (int row = 0; row < matrix.Length; row++)
+            {
+                // choose nearby column per row for semi-random contrast while keeping cohesion
+                int jitter = Random.Shared.Next(-1, 2);
+                int col = (baseCol + jitter + 10) % 10;
+                colors[row] = Color.ParseHex(matrix[row][col]).ToPixel<Rgba32>();
             }
 
-            return outColors;
-        }
-
-        private static double RgbToHue(Rgba32 c)
-        {
-            var r = c.R / 255.0; var g = c.G / 255.0; var b = c.B / 255.0;
-            var max = Math.Max(r, Math.Max(g, b));
-            var min = Math.Min(r, Math.Min(g, b));
-            var d = max - min;
-            if (d == 0) return 0;
-            double h = max == r ? ((g - b) / d) % 6 : max == g ? ((b - r) / d) + 2 : ((r - g) / d) + 4;
-            h *= 60;
-            if (h < 0) h += 360;
-            return h;
-        }
-
-        private static Rgba32 HslToRgb(double h, double s, double l)
-        {
-            h = (h % 360 + 360) % 360;
-            var c = (1 - Math.Abs(2 * l - 1)) * s;
-            var x = c * (1 - Math.Abs((h / 60.0) % 2 - 1));
-            var m = l - c / 2;
-            double r, g, b;
-            if (h < 60) { r = c; g = x; b = 0; }
-            else if (h < 120) { r = x; g = c; b = 0; }
-            else if (h < 180) { r = 0; g = c; b = x; }
-            else if (h < 240) { r = 0; g = x; b = c; }
-            else if (h < 300) { r = x; g = 0; b = c; }
-            else { r = c; g = 0; b = x; }
-            return new Rgba32(
-                (byte)Math.Round((r + m) * 255),
-                (byte)Math.Round((g + m) * 255),
-                (byte)Math.Round((b + m) * 255),
-                255);
+            return colors;
         }
 
         private static string GetSdBaseUrl()
