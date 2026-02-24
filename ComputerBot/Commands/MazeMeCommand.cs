@@ -28,7 +28,7 @@ namespace ComputerBot.Commands
 
             try
             {
-                await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating maze (spacedog wasm)...`");
+                await ctx.Client.SendMessageAsync(ctx.RoomId, "`Generating maze...`");
                 var mazeBytes = await GenerateMazeFromWasmAsync();
 
                 if (string.IsNullOrWhiteSpace(prompt))
