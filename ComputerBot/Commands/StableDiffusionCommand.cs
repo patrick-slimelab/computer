@@ -9,6 +9,7 @@ using ComputerBot.Abstractions;
 using System.Net.Http.Headers;
 using System.Threading;
 using Matrix.Sdk.Core.Domain.RoomEvent;
+using SixLabors.ImageSharp;
 
 namespace ComputerBot.Commands
 {
@@ -88,17 +89,19 @@ namespace ComputerBot.Commands
                         await ctx.Client.SendMessageAsync(ctx.RoomId, "`Found image in reply, using img2img...`");
                         var bytes = await ctx.MatrixService.DownloadMxc(imgEvent.MxcUrl);
                         var base64 = Convert.ToBase64String(bytes);
+                        var (outW, outH) = ComputeSdxlSizeFromImage(bytes);
 
                         endpoint = $"{baseUrl}/sdapi/v1/img2img";
                         payload = new
                         {
                             init_images = new[] { base64 },
                             prompt = prompt,
+                            // Match !mazeme defaults for img2img feel
                             steps = 20,
-                            width = 1024,
-                            height = 1024,
+                            width = outW,
+                            height = outH,
                             sampler_name = "Euler a",
-                            denoising_strength = 0.75
+                            denoising_strength = 0.55
                         };
                     }
                     else
@@ -159,6 +162,40 @@ namespace ComputerBot.Commands
             {
                 await ctx.Client.SendMessageAsync(ctx.RoomId, "`Error: No image returned from SD API`");
             }
+        }
+
+        private static (int width, int height) ComputeSdxlSizeFromImage(byte[] imageBytes)
+        {
+            try
+            {
+                using var image = Image.Load(imageBytes);
+                return ComputeSdxlSize(image.Width, image.Height);
+            }
+            catch
+            {
+                return (1024, 1024);
+            }
+        }
+
+        private static (int width, int height) ComputeSdxlSize(int sourceWidth, int sourceHeight)
+        {
+            if (sourceWidth <= 0 || sourceHeight <= 0) return (1024, 1024);
+
+            const double targetArea = 1024.0 * 1024.0;
+            var scale = Math.Sqrt(targetArea / (sourceWidth * (double)sourceHeight));
+
+            var w = (int)Math.Round(sourceWidth * scale);
+            var h = (int)Math.Round(sourceHeight * scale);
+
+            // SDXL-friendly multiples of 64
+            w = Math.Max(512, (int)Math.Round(w / 64.0) * 64);
+            h = Math.Max(512, (int)Math.Round(h / 64.0) * 64);
+
+            // Keep sane upper bound
+            w = Math.Min(1536, w);
+            h = Math.Min(1536, h);
+
+            return (w, h);
         }
 
         private async Task ExecuteComfyAsync(CommandContext ctx, string prompt, string baseUrl)
