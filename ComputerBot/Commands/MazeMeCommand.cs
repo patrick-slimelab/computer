@@ -165,30 +165,17 @@ namespace ComputerBot.Commands
         private static Color ParseCssColor(string s, Color fallback)
         {
             if (string.IsNullOrWhiteSpace(s)) return fallback;
-            s = s.Trim().ToLowerInvariant();
+            s = s.Trim();
 
-            return s switch
-            {
-                "black" => Color.Black,
-                "white" => Color.White,
-                "red" => Color.Red,
-                "green" => Color.Green,
-                "blue" => Color.Blue,
-                "yellow" => Color.Yellow,
-                "cyan" => Color.Cyan,
-                "magenta" => Color.Magenta,
-                _ => TryParseHex(s, fallback)
-            };
-        }
-
-        private static Color TryParseHex(string s, Color fallback)
-        {
             try
             {
-                if (s.StartsWith("#")) return Color.ParseHex(s);
+                // Handles css names/hex/rgb()/rgba()/hsl()/hsla() when supported by ImageSharp parser.
+                return Color.Parse(s);
             }
-            catch { }
-            return fallback;
+            catch
+            {
+                return fallback;
+            }
         }
 
         private static string GetSdBaseUrl()
