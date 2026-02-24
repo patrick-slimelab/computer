@@ -286,6 +286,20 @@ namespace ComputerBot.Commands
 
         private static Rgba32[] BuildDynamicPalette(string paletteName)
         {
+            if (paletteName.Equals("synthwave", StringComparison.OrdinalIgnoreCase))
+            {
+                // Extra-neon synthwave lane (with slight per-run variation)
+                string[][] neonSets =
+                {
+                    new[] { "#05030A", "#19062F", "#4E08A8", "#FF00CC", "#00E5FF", "#F5FF3B" },
+                    new[] { "#08040F", "#22093A", "#6510C9", "#FF2BD6", "#33F0FF", "#EFFF66" },
+                    new[] { "#03020A", "#14052B", "#5A00B8", "#FF00A8", "#00D8FF", "#DBFF4A" }
+                };
+
+                var pick = neonSets[Random.Shared.Next(neonSets.Length)];
+                return pick.Select(Color.ParseHex).Select(c => c.ToPixel<Rgba32>()).ToArray();
+            }
+
             // 10x10 matrix: rows are "roles" in the palette (dark bg -> bright accent),
             // columns are coherent style variants. We pick (with jitter) a column sample per row.
             string[][] matrix =
