@@ -118,7 +118,7 @@ namespace ComputerBot.Commands
                 throw new Exception("mazeme wasm exports missing");
 
             // Match requested defaults
-            setSeed.Invoke(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            setSeed.Invoke(Random.Shared.Next(1, int.MaxValue));
             setWidth.Invoke(64);
             setHeight.Invoke(64);
             setScale.Invoke(16);
