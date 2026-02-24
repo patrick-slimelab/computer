@@ -156,6 +156,7 @@ namespace ComputerBot.Commands
             var setHeight = instance.GetFunction("setHeight");
             var setScale = instance.GetFunction("setScale");
             var setInset = instance.GetFunction("setInset");
+            var setBraid = instance.GetFunction("setBraid");
             var gen = instance.GetFunction("gen");
 
             if (setSeed == null || setWidth == null || setHeight == null || setScale == null || setInset == null || gen == null)
@@ -171,6 +172,8 @@ namespace ComputerBot.Commands
             setHeight.Invoke(mazeH);
             setScale.Invoke(scale);
             setInset.Invoke(0.0);
+            // Slightly higher openness (braid) so there are fewer dead-ends.
+            setBraid?.Invoke(0.12);
             gen.Invoke();
 
             if (image == null) throw new Exception("WASM did not initialize canvas");
