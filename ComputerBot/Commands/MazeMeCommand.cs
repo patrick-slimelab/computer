@@ -215,11 +215,11 @@ namespace ComputerBot.Commands
                 {
                     init_images = new[] { init },
                     prompt,
-                    steps = 20,
+                    steps = 18,
                     width = 1024,
                     height = 1024,
                     sampler_name = "Euler a",
-                    denoising_strength = 0.75
+                    denoising_strength = 0.35
                 };
 
                 var req = new HttpRequestMessage(HttpMethod.Post, $"{GetSdBaseUrl()}/sdapi/v1/img2img")
