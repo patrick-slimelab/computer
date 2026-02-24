@@ -60,8 +60,8 @@ namespace ComputerBot.Commands
         private static byte[] GenerateMazePng()
         {
             // Square-ish maze tuned for 1024 output
-            const int widthCells = 64;
-            const int heightCells = 64;
+            const int widthCells = 48;
+            const int heightCells = 48;
             var cellSize = ImageSize / (float)Math.Max(widthCells, heightCells);
 
             var open = new bool[widthCells, heightCells, 4];
@@ -70,7 +70,7 @@ namespace ComputerBot.Commands
 
             Carve(0, 0, visited, open, rng, widthCells, heightCells);
 
-            using var img = new Image<Rgba32>(ImageSize, ImageSize, Color.White);
+            using var img = new Image<Rgba32>(ImageSize, ImageSize, Color.Black);
 
             // Fill cells optional style hook: keep white for now.
 
@@ -92,10 +92,10 @@ namespace ComputerBot.Commands
                         x1 -= insetPx;
                         y1 -= insetPx;
 
-                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(Color.Black, 2f, new PointF(x0, y0), new PointF(x1, y0));
-                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(Color.Black, 2f, new PointF(x1, y0), new PointF(x1, y1));
-                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(Color.Black, 2f, new PointF(x0, y1), new PointF(x1, y1));
-                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(Color.Black, 2f, new PointF(x0, y0), new PointF(x0, y1));
+                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(Color.White, 3f, new PointF(x0, y0), new PointF(x1, y0));
+                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(Color.White, 3f, new PointF(x1, y0), new PointF(x1, y1));
+                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(Color.White, 3f, new PointF(x0, y1), new PointF(x1, y1));
+                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(Color.White, 3f, new PointF(x0, y0), new PointF(x0, y1));
                     }
                 }
             });
@@ -138,39 +138,55 @@ namespace ComputerBot.Commands
 
         private static async Task<byte[]> Img2ImgAsync(byte[] initImage, string prompt)
         {
-            var payload = new
-            {
-                init_images = new[] { Convert.ToBase64String(initImage) },
-                prompt,
-                steps = 20,
-                width = 1024,
-                height = 1024,
-                sampler_name = "Euler a",
-                denoising_strength = 0.75
-            };
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
 
-            var req = new HttpRequestMessage(HttpMethod.Post, $"{GetSdBaseUrl()}/sdapi/v1/img2img")
-            {
-                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-            };
+            // First try raw base64, then retry with data URL prefix for stricter backends.
+            var raw = Convert.ToBase64String(initImage);
+            var attempts = new[] { raw, $"data:image/png;base64,{raw}" };
 
-            var auth = Environment.GetEnvironmentVariable("SD_AUTH");
-            if (!string.IsNullOrWhiteSpace(auth))
+            string? lastError = null;
+            foreach (var init in attempts)
             {
-                var bytes = Encoding.UTF8.GetBytes(auth);
-                req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(bytes));
+                var payload = new
+                {
+                    init_images = new[] { init },
+                    prompt,
+                    steps = 20,
+                    width = 1024,
+                    height = 1024,
+                    sampler_name = "Euler a",
+                    denoising_strength = 0.75
+                };
+
+                var req = new HttpRequestMessage(HttpMethod.Post, $"{GetSdBaseUrl()}/sdapi/v1/img2img")
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                };
+
+                var auth = Environment.GetEnvironmentVariable("SD_AUTH");
+                if (!string.IsNullOrWhiteSpace(auth))
+                {
+                    var bytes = Encoding.UTF8.GetBytes(auth);
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(bytes));
+                }
+
+                var resp = await _http.SendAsync(req, cts.Token);
+                var body = await resp.Content.ReadAsStringAsync(cts.Token);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    lastError = $"HTTP {(int)resp.StatusCode}: {body}";
+                    Console.WriteLine($"Img2img attempt failed: {lastError}");
+                    continue;
+                }
+
+                using var doc = JsonDocument.Parse(body);
+                if (!doc.RootElement.TryGetProperty("images", out var images) || images.GetArrayLength() == 0)
+                    throw new Exception("No image returned from img2img");
+
+                return Convert.FromBase64String(images[0].GetString() ?? throw new Exception("Empty img2img payload"));
             }
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-            var resp = await _http.SendAsync(req, cts.Token);
-            resp.EnsureSuccessStatusCode();
-
-            var json = await resp.Content.ReadAsStringAsync(cts.Token);
-            using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("images", out var images) || images.GetArrayLength() == 0)
-                throw new Exception("No image returned from img2img");
-
-            return Convert.FromBase64String(images[0].GetString() ?? throw new Exception("Empty img2img payload"));
+            throw new Exception($"img2img failed: {lastError ?? "unknown error"}");
         }
     }
 }
