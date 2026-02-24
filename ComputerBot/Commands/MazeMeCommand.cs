@@ -219,7 +219,7 @@ namespace ComputerBot.Commands
                     width = 1024,
                     height = 1024,
                     sampler_name = "Euler a",
-                    denoising_strength = 0.5
+                    denoising_strength = 0.6
                 };
 
                 var req = new HttpRequestMessage(HttpMethod.Post, $"{GetSdBaseUrl()}/sdapi/v1/img2img")
