@@ -77,8 +77,6 @@ namespace ComputerBot.Commands
             // Draw walls in black
             img.Mutate(ctx =>
             {
-                var pen = Pens.Solid(Color.Black, 2f);
-
                 for (int y = 0; y < heightCells; y++)
                 {
                     for (int x = 0; x < widthCells; x++)
@@ -94,10 +92,10 @@ namespace ComputerBot.Commands
                         x1 -= insetPx;
                         y1 -= insetPx;
 
-                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(pen, x0, y0, x1, y0);
-                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(pen, x1, y0, x1, y1);
-                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(pen, x0, y1, x1, y1);
-                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(pen, x0, y0, x0, y1);
+                        if (!open[x, y, (int)Dir.N]) ctx.DrawLine(Color.Black, 2f, new PointF(x0, y0), new PointF(x1, y0));
+                        if (!open[x, y, (int)Dir.E]) ctx.DrawLine(Color.Black, 2f, new PointF(x1, y0), new PointF(x1, y1));
+                        if (!open[x, y, (int)Dir.S]) ctx.DrawLine(Color.Black, 2f, new PointF(x0, y1), new PointF(x1, y1));
+                        if (!open[x, y, (int)Dir.W]) ctx.DrawLine(Color.Black, 2f, new PointF(x0, y0), new PointF(x0, y1));
                     }
                 }
             });
