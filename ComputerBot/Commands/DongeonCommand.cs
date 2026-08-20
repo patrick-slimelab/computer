@@ -147,11 +147,11 @@ namespace ComputerBot.Commands
                 if (root is null) return;
 
                 var path = root.Value.GetProperty("login_path").GetString() ?? "";
-                var urlBase = Environment.GetEnvironmentVariable("EVENNIA_PUBLIC_URL") ?? "http://patrick:14001";
+                var urlBase = Environment.GetEnvironmentVariable("EVENNIA_PUBLIC_URL") ?? "https://the-dongeon.scoob.dog";
                 var url = urlBase.TrimEnd('/') + path;
-                var dm = await ctx.Client.CreateTrustedPrivateRoomAsync(new[] { sender });
-                await ctx.Client.SendMessageAsync(dm.RoomId, $"🔐 One-use Dongeon login link for `{sender}`; expires in 15 minutes:\n{url}\n`Do not share this link; it is a bearer token and works once.`");
-                await ctx.Client.SendMessageAsync(ctx.RoomId, $"🔐 I sent the Dongeon one-use login link to `{sender}` in a private Matrix DM. I did not post it here.");
+                var dmRoomId = await ctx.MatrixService.GetOrCreateDirectRoomAsync(sender);
+                await ctx.Client.SendMessageAsync(dmRoomId, $"🔐 One-use Dongeon login link for `{sender}`; expires in 15 minutes:\n{url}\n`Do not share this link; it is a bearer token and works once.`");
+                await ctx.Client.SendMessageAsync(ctx.RoomId, $"🔐 The computer hums and delivers a sealed one-use Dongeon access sigil to `{sender}`'s private terminal.");
             }
             catch (Exception ex)
             {
